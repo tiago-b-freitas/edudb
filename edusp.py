@@ -86,7 +86,7 @@ class handleSaresp(handleDatabase):
                      'classific_cie': 'category',
                      'validade': 'category'}
 
-    def __init__(self, medium, year):
+    def __init__(self, year, medium=requests):
         if (year < self.SARESP_FIRST_YEAR
             or year > self.SARESP_LAST_YEAR
             or year == 2020): # Não houve saresp neste ano
