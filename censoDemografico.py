@@ -77,7 +77,7 @@ class handleCensoDemografico(handleDatabase):
     def make_database_dict(self):
         docpath = glob.glob(f'{self.raw_files_path}/*[Dd]oc*.zip')[0]
 
-        with zipfile.ZipFile(docpath) as zf:
+        with zipfile.ZipFile(docpath, metadata_encoding='cp850') as zf:
             for fn in zf.namelist():
                 filename = os.path.split(fn)[-1]
                 if filename != self.doc_filename:
@@ -113,7 +113,7 @@ class handleCensoDemografico(handleDatabase):
         for filepath in os.listdir(self.raw_files_path):
             if 'documentacao' in filepath.lower() or self.uf not in filepath.upper():
                 continue
-            with zipfile.ZipFile(os.path.join(self.raw_files_path, filepath), 'r') as zf:
+            with zipfile.ZipFile(os.path.join(self.raw_files_path, filepath), metadata_encoding='cp850') as zf:
                 for fn in zf.namelist():
                     if criterion in fn:
                         with zf.open(fn) as f:
@@ -176,7 +176,7 @@ class handleCensoDemografico(handleDatabase):
         path_regioes = 'Documentaç╞o/Divis╞o Territorial do Brasil/'
         external_vars = collections.defaultdict(dict)
         docpath = glob.glob(f'{self.raw_files_path}/*[Dd]oc*.zip')[0]
-        with zipfile.ZipFile(docpath) as zf:
+        with zipfile.ZipFile(docpath, metadata_encoding='cp850') as zf:
             with zf.open(os.path.join(path, 'Atividade CNAE_DOM 2.0 2010.xls')) as f:
                 df_ = pd.read_excel(f, skiprows=1, dtype='string')
             external_vars['V6471'] = {key.strip(): value.strip() for key, value
@@ -209,14 +209,14 @@ class handleCensoDemografico(handleDatabase):
                                             .itertuples(index=False, name=None)
                                       if pat.search(key)}
 
-            with zf.open(os.path.join(path, 'Migraç╞o e deslocamento _Unidades da Federaç╞o.xls')) as f:
+            with zf.open(os.path.join(path, 'Migração e deslocamento _Unidades da Federação.xls')) as f:
                 df_ = pd.read_excel(f, skiprows=5, dtype='string')
             dict_mig_uf = {key.strip(): value.strip() for value, key
                            in df_.dropna().itertuples(index=False, name=None)}
             for var in ('V6222', 'V6252', 'V6262', 'V6362', 'V6602'):
                 external_vars[var] = dict_mig_uf
 
-            with zf.open(os.path.join(path, 'Migraç╞o e deslocamento _Municípios.xls')) as f:
+            with zf.open(os.path.join(path, 'Migração e deslocamento _Municípios.xls')) as f:
                 df_ = pd.read_excel(f, skiprows=6, dtype='string')
             dict_mig_mun = {key.strip(): value.strip() for value, key
                            in df_.iloc[:, 1:3]
@@ -225,7 +225,7 @@ class handleCensoDemografico(handleDatabase):
             for var in ('V6254', 'V6264', 'V6364', 'V6604'):
                 external_vars[var] = dict_mig_mun
 
-            with zf.open(os.path.join(path, 'Migraç╞o e Deslocamento_Paises estrangeiros.xls')) as f:
+            with zf.open(os.path.join(path, 'Migração e Deslocamento_Paises estrangeiros.xls')) as f:
                 df_ = pd.read_excel(f, skiprows=7, dtype='string')
             dict_mig_pais = {key.strip(): value.strip() for value, key
                            in df_.iloc[:, 1:3]
@@ -235,9 +235,9 @@ class handleCensoDemografico(handleDatabase):
                 external_vars[var] = dict_mig_pais
 
             pat = re.compile(r'\d{3}')
-            with zf.open(os.path.join(path, 'Religi╞o 2010.txt')) as f:
+            with zf.open(os.path.join(path, 'Religião 2010.txt')) as f:
                 for line in f.readlines():
-                    line = line.decode('windows-1252').strip()
+                    line = line.decode('latin_1').strip()
                     if pat.search(line):
                         key, value = line.split(maxsplit=1)
                         external_vars['V6121'][key] = value
@@ -252,7 +252,7 @@ class handleCensoDemografico(handleDatabase):
             external_vars['V6472'] = dict_ativ_2000
 
             with zf.open(os.path.join(path_regioes,
-                                      'Unidades da Federaç╞o, MesorregiΣes, microrregiΣes e municípios 2010.xls')) as f:
+                                      'Unidades da Federação, Mesorregiões, microrregiões e municípios 2010.xls')) as f:
                 df_ = pd.read_excel(f, skiprows=2, dtype='string')
                 for _, _, meso, nome_meso, micro, nome_micro, mun, nome_mun in df_.itertuples(index=False, name=None):
                     external_vars['V1002'][meso.strip()] = nome_meso.strip()
@@ -324,19 +324,58 @@ class handleCensoDemografico(handleDatabase):
         return nome, vars_cod
 
     def get_coded_var(self, var):
-        return self.df[var].map(self.get_map_var(var)[1])
+        if var == 'V0002':
+            col = self.cod_mun
+        elif var == 'V1002':
+            col = self.cod_meso
+        elif var == 'V1003':
+            col = self.cod_micro
+        else:
+            col = self.df[var]
+        return col.map(self.get_map_var(var)[1])
 
-    def crosstab(self, index_vars, columns_vars, values, aggfunc):
+    def crosstab(self,
+                 index_vars,
+                 columns_vars,
+                 values=None,
+                 aggfunc='mean',
+                 threshold=0,
+                 normalize=False,
+                 margins=False,
+                 margins_name='All'):
         index = [self.get_coded_var(var) for var in index_vars]
         columns = [self.get_coded_var(var) for var in columns_vars]
-        if aggfunc == 'mean':
-            aggfunc = mean_weight
-        elif aggfunc == 'median':
-            aggfunc = median_weight
-        elif aggfunc == 'std':
-            aggfunc = std_weight
+        if values is not None:
+            if aggfunc == 'mean':
+                aggfunc = mean_weight
+            elif aggfunc == 'median':
+                aggfunc = median_weight
+            elif aggfunc == 'std':
+                aggfunc = std_weight
 
-        return pd.crosstab(index=index,
+            return pd.crosstab(index=index,
                            columns=columns,
                            values=self.df[values],
-                           aggfunc=lambda s: aggfunc(s, self.df[self.weight_var]))
+                           aggfunc=lambda s: aggfunc(s,
+                                                     self.df[self.weight_var],
+                                                     threshold))
+        else:
+            return pd.crosstab(index=index,
+                               columns=columns,
+                               values=self.df[self.weight_var],
+                               aggfunc='sum',
+                               normalize=normalize,
+                               margins=margins,
+                               margins_name=margins_name)
+
+    def get_df(self, filetype, **kwargs):
+        df = super().get_df(filetype, **kwargs)
+        self.cod_mun = (self.df.V0001.astype('string')
+                        + self.df.V0002.astype('string')).astype('category')
+        self.cod_meso = (self.df.V0001.astype('string')
+                        + self.df.V1002.astype('string')).astype('category')
+        self.cod_micro = (self.df.V0001.astype('string')
+                        + self.df.V1003.astype('string')).astype('category')
+        return df
+
+
