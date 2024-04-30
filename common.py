@@ -12,7 +12,7 @@ from statsmodels.stats.weightstats import DescrStatsW
 import pandas as pd
 import requests
 
-from .definitions import FILETYPES_PATH
+from .definitions import FILETYPES_PATH, SUPPORTED_FTs
 
 def get_dtype(series, df):
     if pd.notna(series.Categoria):
@@ -85,15 +85,14 @@ def parse_sas(self, f, encoding, ignore=False):
             continue
 
         l = line.decode(encoding)
-        print(line)
 
-        pos, key, type_, desc = l.split(maxsplit=3)
+        pos, var, type_, name = l.split(maxsplit=3)
 
         pos = int(pos[1:]) - 1
-        desc = desc.strip('/*\t\r\n" ')
-        if ignore and desc.startswith(ignore):
+        name = name.strip('/*\t\r\n" ')
+        if ignore and name.startswith(ignore):
             continue
-        fraction = pd.NA
+        frac_part = pd.NA
         if type_[0] == '$':
             try:
                 size = int(type_[1:-1])
@@ -103,26 +102,27 @@ def parse_sas(self, f, encoding, ignore=False):
             type_ = 'category'
 
         else:
-            size, fraction = type_.split('.')
+            size, frac_part = type_.split('.')
             size = int(size)
-            type_ = 'integer'
-            if fraction:
-                fraction = int(fraction)
-                type_ = 'float'
+            type_ = 'string'
+            frac_part = int(frac_part) if frac_part else pd.NA
+
+        int_part = size - (frac_part if pd.notna(frac_part) else 0)
 
         db_dict['pos'].append(pos)
-        db_dict['key'].append(key)
+        db_dict['var'].append(var)
         db_dict['type'].append(type_)
+        db_dict['int_part'].append(int_part)
+        db_dict['name'].append(name)
+        db_dict['frac_part'].append(frac_part)
         db_dict['size'].append(size)
-        db_dict['desc'].append(desc)
-        db_dict['fraction'].append(fraction)
     
         df_dict = pd.DataFrame(db_dict)
         self.colspecs = [(pos, pos+size) for pos, size in
                    df_dict[['pos', 'size']].itertuples(index=False, name=None)]
 
-        self.dtypes = {key: type_ for key, type_ in
-                    df_dict[['key', 'type']].itertuples(index=False, name=None)
+        self.dtypes = {var: type_ for var, type_ in
+                    df_dict[['var', 'type']].itertuples(index=False, name=None)
                        if type_}
 
         self.df_dict = df_dict
@@ -182,18 +182,22 @@ class handleDatabase:
     def get_save_raw_database(self, cert=True):
         if not hasattr(self, 'file_url'):
             self.get_url()
+        print('GDFGFDGFD', self.file_url)
         filename = os.path.split(self.file_url)[-1]
-        self.filepath = os.path.join(self.raw_files_path, filename)
-        if os.path.isfile(self.filepath):
-            print_info(f'{self.filepath} já existente.')
-            return
-        print_info(f'{self.filepath} não existente. Fazendo download.')
+        print(filename)
+        filepath = os.path.join(self.raw_files_path, filename)
+        print(filepath)
+        if os.path.isfile(filepath):
+            print_info(f'{filepath} já existente.')
+            return filepath
+        print_info(f'{filepath} não existente. Fazendo download.')
         r = self.medium.get(self.file_url, verify=cert)
         print_info('Download concluído!',
                   f'Gravando arquivo.')
-        with open(self.filepath, 'wb') as f:
+        with open(filepath, 'wb') as f:
             f.write(r.content)
         print_info('Arquivo gravado com sucesso!')
+        return filepath
 
     def assert_url(self, file_urls):
         if len(file_urls) == 0:
@@ -241,7 +245,7 @@ class handleDatabase:
         print_info('Padronização conluída!')
 
     def get_df(self, filetype, **kwargs):
-        if filetype not in self.SUPPORTED_FTs:
+        if filetype not in SUPPORTED_FTs:
             raise ValueError
 
         self.dir_path = os.path.join(self.path, FILETYPES_PATH[filetype])
@@ -259,7 +263,7 @@ class handleDatabase:
 
             return self.df
 
-        if not hasattr(self, 'filepath'):
+        if not hasattr(self, 'filepath') and not hasattr(self, 'filepaths'):
             self.get_save_raw_database()
         if not hasattr(self, 'df') and self.is_zipped:
             self.wraper_unzip(self.unzip)

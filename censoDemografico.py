@@ -8,7 +8,7 @@ import requests
 
 from .common import handleDatabase, mean_weight, std_weight, median_weight,\
                     print_info, print_error, parse_sas
-from .definitions import FILETYPES_PATH, RAW_FILES_PATH, UF_SIGLA_NOME
+from .definitions import FILETYPES_PATH, RAW_FILES_PATH, UF_SIGLA_NOME, SUPPORTED_FTs
 
 PATH = 'censo-demografico'
 
@@ -27,7 +27,7 @@ CRITERION = ('[file_url["href"] for file_url in soup.find_all("a")'
 DOCUMENTACAO = {
     'PESS': {2000: 'LE PESSOAS.sas',
              2010: 'Layout_microdados_Amostra.xls'},
-    'DOMI': {2000: 'LE FAMILIAS.sas',
+    'DOMI': {2000: 'LE DOMIC.sas',
              2010: 'Layout_microdados_Amostra.xls'}
 }
 
@@ -54,7 +54,7 @@ class handleCensoDemografico(handleDatabase):
         self.uf = uf.upper()
         super().__init__(medium, year)
         self.name = 'Censo Demográfico'
-        self.filename = f'{year}-{type_db}-{uf}-censo-demografico'
+        self.filename = f'{self.year}-{self.type_db}-{self.uf}-censo-demografico'
         self.path = os.path.join(self.root, PATH)
         if not os.path.isdir(self.path):
             os.mkdir(self.path)
@@ -79,9 +79,11 @@ class handleCensoDemografico(handleDatabase):
 
     def get_save_raw_database(self):
         self.get_url()
+        self.filepaths = []
         for file_url in self.file_urls:
             self.file_url = file_url
-            super().get_save_raw_database()
+            filepath = super().get_save_raw_database()
+            self.filepaths.append(filepath)
 
     def make_database_dict(self):
         docpath = glob.glob(f'{self.raw_files_path}/*[Dd]oc*.zip')[0]
@@ -103,70 +105,86 @@ class handleCensoDemografico(handleDatabase):
                         parse_sas(self, f, encoding='latin-1')
                     case 2010:
                         self.df_dict = pd.read_excel(f,
-                                               sheet_name=['DOMI', 'PESS'],
+                                               sheet_name=self.type_df,
                                                skiprows=1)
 
                         self.colspecs = {}
                         self.dtypes = {}
-                        for df_name in ('DOMI', 'PESS'):
-                            df = self.df_dict[df_name]
-                            self.df_dict[df_name]['colspecs'] = [
-                                (inicial - 1, final) for inicial, final in 
-                            zip(df['POSIÇÃO INICIAL'], df['POSIÇÃO FINAL'])
-                            ]
-                            self.dtypes[df_name]   = {}
-                            for tipo, var in zip(df.TIPO, df.VAR):
-                                tipo = tipo.strip()
-                                dtype = 'string'
-                                if tipo == 'C':
-                                    dtype = 'category'
-                                self.dtypes[df_name][var] = dtype
+                        self.colspecs = [(start - 1, end) for start, end in 
+                                       zip(self.df_dict['POSIÇÃO INICIAL'],
+                                                self.df_dict['POSIÇÃO FINAL'])]
+                        self.dtypes  = {}
+                        for type_, var in zip(df.TIPO, df.VAR):
+                            type_ = type_.strip()
+                            dtype = 'string'
+                            if tipo == 'C':
+                                dtype = 'category'
+                            self.dtypes[var] = dtype
+
+                        self.df_dict.columns = ['var', 'name', 'pos', 'end_pos',
+                                                'int_part', 'frac_part', 'type']
+
+
 
     def unzip(self):
-        if not hasattr(self, 'filepath'):
+        if not hasattr(self, 'filepaths'):
             self.get_save_raw_database()
         if not hasattr(self, 'database_dict'):
             self.make_database_dict()
 
-        if self.type_db == 'PESS':
-            criterion = 'Amostra_Pessoas'
+        match self.type_db:
+            case 'PESS':
+                criterion = 'PES'
+            case 'DOMI':
+                criterion = 'DOM'
         self.df = pd.DataFrame()
-        for filepath in os.listdir(self.raw_files_path):
-            if 'documentacao' in filepath.lower() or self.uf not in filepath.upper():
-                continue
-            with zipfile.ZipFile(os.path.join(self.raw_files_path, filepath), metadata_encoding='cp850') as zf:
-                for fn in zf.namelist():
-                    if criterion in fn:
-                        with zf.open(fn) as f:
-                            df = pd.read_fwf(f,
-                                             names=self.df_dict[self.type_db].VAR,
-                                             colspecs=self.df_dict[self.type_db].colspecs.to_list(),
-                                             dtype=self.dtypes[self.type_db])
+        for filepath in self.filepaths:
+            with zipfile.ZipFile(filepath, metadata_encoding='cp850') as zf:
+                fn = [fn for fn in zf.namelist() if criterion in fn.upper()][0]
+                if os.path.splitext(fn)[-1] == '.zip':
+                    with zf.open(fn) as f:
+                        with zipfile.ZipFile(f, metadata_encoding='cp850') as zf1:
+                            fn = [fn for fn in zf1.namelist() if criterion in fn.upper()][0]
+                            with zf1.open(fn) as f1:
+                                df = pd.read_fwf(f1,
+                                                 names=self.df_dict['var'],
+                                                 colspecs=self.colspecs,
+                                                     dtype=self.dtypes)
+                else:
+                    with zf.open(fn) as f:
+                        df = pd.read_fwf(f,
+                                         names=self.df_dict['var'],
+                                         colspecs=self.colspecs,
+                                             dtype=self.dtypes)
+
                 self.df = pd.concat([self.df, df], ignore_index=True)
         
-        if self.uf == 'SP':
-            for col, dtype in self.dtypes[self.type_db].items():
+        if self.uf == 'SP' and self.year == 2010:
+            for col, dtype in self.dtypes.items():
                 if self.df[col].dtype != dtype:
                     self.df[col] = self.df[col].astype(dtype)
         return self.df
 
-    def str_to_float(self, s, first, last):
+    def str_to_float(self, s, int_part, frac_part):
         if pd.isna(s):
             return pd.NA
-        assert(first + last == len(s))
-        return float(s[:first] + '.' + s[first:])
+        assert(int_part + frac_part == len(s))
+        return float(s[:int_part] + '.' + s[int_part:])
 
     def preprocess_df(self):
         if not hasattr(self, 'df'):
             self.unzip()
-        float_vars = self.df_dict[self.type_db].loc[self.df_dict[self.type_db].DEC.notna(),
-                                               ['VAR', 'INT', 'DEC']]
-        for var, first, last in float_vars.itertuples(index=False, name=None):
-            self.df[var] = self.df[var].apply(self.str_to_float, args=(first, last))
+        float_vars = self.df_dict.loc[self.df_dict.frac_part.notna(),
+                                       ['var', 'int_part', 'frac_part', 'size']]
+        for var, int_part, frac_part, size in float_vars.itertuples(False, None):
+            if self.year == 2000:
+                self.df[var]  = self.df[var].str.zfill(size)
+            self.df[var] = self.df[var].apply(self.str_to_float,
+                                                    args=(int_part, frac_part))
             self.df[var] = self.df[var].astype('Float64')
 
-        for col in self.df.select_dtypes(object).columns:
-            if col == 'V0300':
+        for col in self.df.select_dtypes('string').columns:
+            if self.year in (2000, 2010) and col == 'V0300':
                 continue
             tmp =  pd.to_numeric(self.df[col])
             max_ = tmp.max()
@@ -400,13 +418,60 @@ class handleCensoDemografico(handleDatabase):
                                margins=margins,
                                margins_name=margins_name)
 
-    def get_df(self, filetype, **kwargs):
+    def get_df(self, filetype='parquet', **kwargs):
         df = super().get_df(filetype, **kwargs)
-        self.cod_mun = (self.df.V0001.astype('string')
-                        + self.df.V0002.astype('string')).astype('category')
-        self.cod_meso = (self.df.V0001.astype('string')
-                        + self.df.V1002.astype('string')).astype('category')
-        self.cod_micro = (self.df.V0001.astype('string')
-                        + self.df.V1003.astype('string')).astype('category')
+        if self.year == 2010:
+            self.cod_mun = (self.df.V0001.astype('string')
+                            + self.df.V0002.astype('string')).astype('category')
+            self.cod_meso = (self.df.V0001.astype('string')
+                            + self.df.V1002.astype('string')).astype('category')
+            self.cod_micro = (self.df.V0001.astype('string')
+                            + self.df.V1003.astype('string')).astype('category')
         return df
+
+    def get_df(self, filetype='parquet', **kwargs):
+        if filetype not in SUPPORTED_FTs:
+            raise ValueError
+        if self.uf == 'ALL':
+            self.dir_path = os.path.join(self.path, FILETYPES_PATH[filetype])
+            if not os.path.isdir(self.dir_path):
+                os.mkdir(self.dir_path)
+                
+            self.dest_filepath = os.path.join(self.dir_path,
+                                              f'{self.filename}.{filetype}')
+            if os.path.isfile(self.dest_filepath):
+                print_info(f'Arquivo {self.dest_filepath} já existente')
+                read_fun = getattr(pd, f'read_{filetype}')
+                self.df = read_fun(self.dest_filepath, **kwargs)
+                return self.df
+            all_ufs = [f for f in glob.glob(f'{self.dir_path}/*.{filetype}')
+                          if 'ALL' not in f]
+            is_complete = True
+            for uf in UF_SIGLA_NOME:
+                has_processed = False
+                for f in all_ufs:
+                    if uf in f:
+                        has_processed = True
+                if not has_processed:
+                    print_error(f'A uf {uf} não foi ainda processada')
+                    is_complete = False
+            if not is_complete:
+                print_error('É preciso processar todas as ufs antes de juntá-las todas')
+                raise ValueError
+            print_info('Todas as ufs já foram processadas, preparando para juntá-las')
+            self.df = pd.DataFrame()
+            for f in all_ufs:
+                print(f)
+                df_tmp = pd.read_parquet(f)
+                self.df = pd.concat([self.df, df_tmp], ignore_index=True)
+
+            for col in self.df.select_dtypes(object).columns:
+                if self.year in (2000, 2010) and col == 'V0300':
+                    continue
+                self.df[col] = self.df[col].astype('category')
+
+            self.save(filetype=self.filetype)
+            return self.df
+        else:
+            return super.get_df(filetype, **kwargs)
 

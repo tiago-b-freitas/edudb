@@ -4,6 +4,9 @@ FILETYPES_PATH = {
     'feather': 'feathers',
     'parquet': 'parquets',
 }
+
+SUPPORTED_FTs = ('feather', 'parquet')
+
 RAW_FILES_PATH = 'raw-files'
 
 UF_SIGLA_NOME = {
