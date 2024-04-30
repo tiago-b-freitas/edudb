@@ -78,6 +78,56 @@ def median_weight(s, weights, threshold):
     return pd.NA
 
 
+def parse_sas(self, f, encoding, ignore=False):
+    db_dict = collections.defaultdict(list)
+    for line in f.readlines():
+        if not line.startswith(b'@'):
+            continue
+
+        l = line.decode(encoding)
+        print(line)
+
+        pos, key, type_, desc = l.split(maxsplit=3)
+
+        pos = int(pos[1:]) - 1
+        desc = desc.strip('/*\t\r\n" ')
+        if ignore and desc.startswith(ignore):
+            continue
+        fraction = pd.NA
+        if type_[0] == '$':
+            try:
+                size = int(type_[1:-1])
+            except ValueError:
+                size, _ = type_[1:].split('.')
+                size = int(size)
+            type_ = 'category'
+
+        else:
+            size, fraction = type_.split('.')
+            size = int(size)
+            type_ = 'integer'
+            if fraction:
+                fraction = int(fraction)
+                type_ = 'float'
+
+        db_dict['pos'].append(pos)
+        db_dict['key'].append(key)
+        db_dict['type'].append(type_)
+        db_dict['size'].append(size)
+        db_dict['desc'].append(desc)
+        db_dict['fraction'].append(fraction)
+    
+        df_dict = pd.DataFrame(db_dict)
+        self.colspecs = [(pos, pos+size) for pos, size in
+                   df_dict[['pos', 'size']].itertuples(index=False, name=None)]
+
+        self.dtypes = {key: type_ for key, type_ in
+                    df_dict[['key', 'type']].itertuples(index=False, name=None)
+                       if type_}
+
+        self.df_dict = df_dict
+
+
 class handleDatabase:
     def __init__(self, medium, year):
         self.medium = medium
@@ -122,6 +172,9 @@ class handleDatabase:
             self.assert_url(file_urls)
             self.file_url = unquote_plus(file_urls[0])
         else:
+            if not file_urls:
+                print_error('Não foi encontrado nenhum endereço!')
+                raise ValueError
             self.file_url = file_urls
         print_info(f'Endereço(s) {self.file_url} obtido com sucesso!')
         return self.file_url
