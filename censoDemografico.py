@@ -1,10 +1,13 @@
 import collections
+import glob
 import os
+import zipfile
 
 import pandas as pd
 import requests
 
-from .common import handleDatabase, mean_weight, std_weight, median_weight
+from .common import handleDatabase, mean_weight, std_weight, median_weight,\
+                    print_info, print_error, parse_sas
 from .definitions import FILETYPES_PATH, RAW_FILES_PATH, UF_SIGLA_NOME
 
 PATH = 'censo-demografico'
@@ -15,22 +18,28 @@ URL = {
 
 TYPES = ('PESS', 'DOMI')
 
+CRITERION_ALL = ('[file_url["href"] for file_url in soup.find_all("a")'
+                               ' if "zip" in file_url["href"]]')
 CRITERION = ('[file_url["href"] for file_url in soup.find_all("a")'
-                               'if "zip" in file_url["href"]]')
+                               ' if "zip" in file_url["href"]' 
+                               ' and f"{self.uf}" in file_url["href"]]')
 
 DOCUMENTACAO = {
-    2000: ['LE DOMIC.sas', 'LE FAMILIAS.sas', 'LE PESSOAS'],
-    2010: 'Layout_microdados_Amostra.xls',
+    'PESS': {2000: 'LE PESSOAS.sas',
+             2010: 'Layout_microdados_Amostra.xls'},
+    'DOMI': {2000: 'LE FAMILIAS.sas',
+             2010: 'Layout_microdados_Amostra.xls'}
 }
 
 WEIGHTS = {
+    2000: 'P001',
     2010: 'V0010',
 }
 
 class handleCensoDemografico(handleDatabase):
     def __init__(self, year, uf, type_db, medium=requests):
-        if year != 2010:
-            print_errort(f'Ano {year} não implementado.')
+        if year not in (2000, 2010):
+            print_error(f'Ano {year} não implementado.')
             raise ValueError 
         if uf not in UF_SIGLA_NOME and uf != 'all':
             print_error(f'UF {uf} não implementada. As opções válidas são'
@@ -57,12 +66,12 @@ class handleCensoDemografico(handleDatabase):
         if not os.path.isdir(self.raw_files_path):
             os.mkdir(self.raw_files_path)
         self.url = URL[year]
-        self.doc_filename = DOCUMENTACAO[year]
+        self.doc_filename = DOCUMENTACAO[self.type_db][self.year]
         self.is_zipped = True
         self.weight_var = WEIGHTS[self.year] 
 
     def get_url(self):
-        criterion = CRITERION
+        criterion = CRITERION_ALL if self.uf == 'ALL' else CRITERION
         file_urls = super().get_url(criterion, unique=False)
         self.file_urls = [os.path.join(self.url, file_url)
                           for file_url in file_urls]
@@ -78,28 +87,40 @@ class handleCensoDemografico(handleDatabase):
         docpath = glob.glob(f'{self.raw_files_path}/*[Dd]oc*.zip')[0]
 
         with zipfile.ZipFile(docpath, metadata_encoding='cp850') as zf:
-            for fn in zf.namelist():
-                filename = os.path.split(fn)[-1]
-                if filename != self.doc_filename:
-                    continue
-                break
-            with zf.open(fn) as f:
-                self.df_dict = pd.read_excel(f, sheet_name=['DOMI', 'PESS'],
-                                             skiprows=1)
+            for file_path in zf.namelist():
+                filename = os.path.split(file_path)[-1]
+                if filename == self.doc_filename:
+                    fp = file_path
+                    break
+            try:
+                print_info(f'Extraíndo informações do arquivo {fp}')
+            except UnboundLocalError:
+                print_error(f'Não foi possível encontrar o arquivo {self.doc_filename}')
+                raise UnboundLocalError
+            with zf.open(fp) as f:
+                match self.year:
+                    case 2000:
+                        parse_sas(self, f, encoding='latin-1')
+                    case 2010:
+                        self.df_dict = pd.read_excel(f,
+                                               sheet_name=['DOMI', 'PESS'],
+                                               skiprows=1)
 
-        self.colspecs = {}
-        self.dtypes = {}
-        for df_name in ('DOMI', 'PESS'):
-            df = self.df_dict[df_name]
-            self.df_dict[df_name]['colspecs'] = [(inicial - 1, final) for inicial, final in 
-                                                 zip(df['POSIÇÃO INICIAL'], df['POSIÇÃO FINAL'])]
-            self.dtypes[df_name]   = {}
-            for tipo, var in zip(df.TIPO, df.VAR):
-                tipo = tipo.strip()
-                dtype = 'string'
-                if tipo == 'C':
-                    dtype = 'category'
-                self.dtypes[df_name][var] = dtype
+                        self.colspecs = {}
+                        self.dtypes = {}
+                        for df_name in ('DOMI', 'PESS'):
+                            df = self.df_dict[df_name]
+                            self.df_dict[df_name]['colspecs'] = [
+                                (inicial - 1, final) for inicial, final in 
+                            zip(df['POSIÇÃO INICIAL'], df['POSIÇÃO FINAL'])
+                            ]
+                            self.dtypes[df_name]   = {}
+                            for tipo, var in zip(df.TIPO, df.VAR):
+                                tipo = tipo.strip()
+                                dtype = 'string'
+                                if tipo == 'C':
+                                    dtype = 'category'
+                                self.dtypes[df_name][var] = dtype
 
     def unzip(self):
         if not hasattr(self, 'filepath'):
@@ -162,7 +183,7 @@ class handleCensoDemografico(handleDatabase):
         return self.df
 
     def dict_educacao_superior(self, zf, var, filename, dict_vars, missing_values):
-        path = 'Documentaç╞o/Anexos Auxiliares'
+        path = 'Documentação/Anexos Auxiliares'
         pat = re.compile(r'\d{3}')
         with zf.open(os.path.join(path, filename)) as f:
             df = pd.read_excel(f, skiprows=1, dtype='string')
@@ -172,8 +193,19 @@ class handleCensoDemografico(handleDatabase):
         dict_vars[var].update(missing_values)
 
     def make_map_dict(self):
-        path = 'Documentaç╞o/Anexos Auxiliares'
-        path_regioes = 'Documentaç╞o/Divis╞o Territorial do Brasil/'
+        match self.year:
+            case 2000:
+                df = self.make_map_dict_2010()
+            case 2010:
+                df = self.make_map_dict_2000()
+        return df
+
+    def make_map_dict_2000(self):
+        ...
+
+    def make_map_dict_2010(self):
+        path = 'Documentação/Anexos Auxiliares'
+        path_regioes = 'Documentação/Divisão Territorial do Brasil/'
         external_vars = collections.defaultdict(dict)
         docpath = glob.glob(f'{self.raw_files_path}/*[Dd]oc*.zip')[0]
         with zipfile.ZipFile(docpath, metadata_encoding='cp850') as zf:
@@ -303,7 +335,7 @@ class handleCensoDemografico(handleDatabase):
         df = pd.DataFrame({'COD_VAR': [key for key in names],
               'NOME_VAR': [nome for nome in names.values()],
               'MAP_VAR': [cod_vars_dict.get(key, pd.NA) for key in names]})
-        df.to_csv(f'{self.path_dict}.csv', index=False)
+        df.to_excel(f'{self.path_dict}.xlsx', index=False)
         df.to_pickle(f'{self.path_dict}.pickle')
         return df
 
@@ -377,5 +409,4 @@ class handleCensoDemografico(handleDatabase):
         self.cod_micro = (self.df.V0001.astype('string')
                         + self.df.V1003.astype('string')).astype('category')
         return df
-
 
