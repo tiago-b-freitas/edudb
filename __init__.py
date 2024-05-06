@@ -1,7 +1,8 @@
 #from .edubr import handleCensoEscolar, handleCensoDemografico, handlePNADc,\
 #                   handleRendimentoEscolar
 #from .edusp import handleSaresp
-from .censoDemografico import handleCensoDemografico 
+from .censoDemografico import handleCensoDemografico
+from .pnadc import handlePNADc
 from .definitions import UF_SIGLA_NOME
 
 
@@ -19,5 +20,6 @@ __version__ = '0.1.0'
 
 __all__ = (
     "handleCensoEscolar",
+    "handlePNADc",
     "UF_SIGLA_NOME"
 )

@@ -85,12 +85,11 @@ def parse_sas(self, f, encoding, ignore=False):
             continue
 
         l = line.decode(encoding)
-
-        pos, var, type_, name = l.split(maxsplit=3)
+        pos, key, type_, name = l.split(maxsplit=3)
 
         pos = int(pos[1:]) - 1
         name = name.strip('/*\t\r\n" ')
-        if ignore and name.startswith(ignore):
+        if ignore and name.lower().startswith(ignore.lower()):
             continue
         frac_part = pd.NA
         if type_[0] == '$':
@@ -110,22 +109,22 @@ def parse_sas(self, f, encoding, ignore=False):
         int_part = size - (frac_part if pd.notna(frac_part) else 0)
 
         db_dict['pos'].append(pos)
-        db_dict['var'].append(var)
+        db_dict['key'].append(key)
         db_dict['type'].append(type_)
         db_dict['int_part'].append(int_part)
         db_dict['name'].append(name)
         db_dict['frac_part'].append(frac_part)
         db_dict['size'].append(size)
     
-        df_dict = pd.DataFrame(db_dict)
-        self.colspecs = [(pos, pos+size) for pos, size in
-                   df_dict[['pos', 'size']].itertuples(index=False, name=None)]
+    df_dict = pd.DataFrame(db_dict)
+    self.colspecs = [(pos, pos+size) for pos, size in
+               df_dict[['pos', 'size']].itertuples(index=False, name=None)]
 
-        self.dtypes = {var: type_ for var, type_ in
-                    df_dict[['var', 'type']].itertuples(index=False, name=None)
-                       if type_}
+    self.dtypes = {key: type_ for key, type_ in
+                df_dict[['key', 'type']].itertuples(index=False, name=None)
+                   if type_}
 
-        self.df_dict = df_dict
+    self.df_dict = df_dict
 
 
 class handleDatabase:
@@ -182,11 +181,11 @@ class handleDatabase:
     def get_save_raw_database(self, cert=True):
         if not hasattr(self, 'file_url'):
             self.get_url()
-        print('GDFGFDGFD', self.file_url)
-        filename = os.path.split(self.file_url)[-1]
-        print(filename)
+        if hasattr(self, 'raw_filename'):
+            filename = self.raw_filename
+        else:
+            filename = os.path.split(self.file_url)[-1]
         filepath = os.path.join(self.raw_files_path, filename)
-        print(filepath)
         if os.path.isfile(filepath):
             print_info(f'{filepath} já existente.')
             return filepath
@@ -264,7 +263,7 @@ class handleDatabase:
             return self.df
 
         if not hasattr(self, 'filepath') and not hasattr(self, 'filepaths'):
-            self.get_save_raw_database()
+            self.filepath = self.get_save_raw_database()
         if not hasattr(self, 'df') and self.is_zipped:
             self.wraper_unzip(self.unzip)
         if not self.is_preprocessed:
@@ -283,3 +282,107 @@ class handleDatabase:
         save_fun = getattr(self.df, f'to_{filetype}')
         save_fun(self.dest_filepath)
         print_info('Arquivo salvo com sucesso!')
+
+    def get_min_int_dtype(self):
+        if self.df[col].dtype == 'object':
+            self.df[col] = self.df[col].astype(float).max()
+        max_ = self.df[col].max()
+        if max_ >= 2**32:
+            dtype = 'UInt64'
+        elif max_ >= 2**16:
+            dtype = 'UInt32'
+        elif max_ >= 2**8:
+            dtype = 'UInt16'
+        else:
+            dtype = 'UInt8'
+        return dtype
+    
+    def get_map_var(self, var):
+        if not hasattr(self, 'map_dict_vars'):
+            if not os.path.isfile(f'{self.path_dict}.pickle'):
+                print_info('Dicionário da base não existente. Construindo...')
+                self.make_map_dict()
+                print_info('Dicionário concluído com sucesso!')
+            else:
+                self.map_dict_vars = pd.read_pickle(f'{self.path_dict}.pickle')
+
+        if var == 'all':
+            return self.map_dict_vars
+
+        df = self.map_dict_vars
+        nome = df.loc[df.COD_VAR == var, 'NOME_VAR'].values[0]
+        vars_cod = df.loc[df.COD_VAR == var, 'MAP_VAR'].values[0]
+        return nome, vars_cod
+
+    def crosstab(self,
+                 index_vars,
+                 columns_vars=None,
+                 values=None,
+                 aggfunc='mean',
+                 threshold=0,
+                 normalize=False,
+                 margins=False,
+                 margins_name='All'):
+
+        if not isinstance(index_vars, list):
+            index_vars = [index_vars]
+        if not isinstance(columns_vars, list):
+            columns_vars = [columns_vars]
+        if values is None:
+            vars_g = [*index_vars, *columns_vars] if columns_vars[0] is not None else index_vars
+            table = self.df.groupby(vars_g, observed=False)[self.weight_var].sum()
+            
+            index_mapper = [self.get_map_var(v) for v in index_vars]
+            columns_mapper = [self.get_map_var(v) for v in columns_vars if v is not None]
+
+            if columns_mapper:
+                table = table.unstack(list(range(-1, -len(columns_mapper)-1, -1)))
+                iter_levels = []
+                names = []
+                for level, (name, map_var) in enumerate(columns_mapper):
+                    iter_levels.append(table.columns.get_level_values(level).map(map_var))
+                    names.append(name)
+                new_columns = pd.MultiIndex.from_arrays(iter_levels, names=names)
+                table.columns = new_columns
+                table = table[table.columns.dropna()]
+
+            iter_levels = []
+            names = []
+            for level, (name, map_var) in enumerate(index_mapper):
+                iter_levels.append(table.index.get_level_values(level).map(map_var))
+                names.append(name)
+            new_index = pd.MultiIndex.from_arrays(iter_levels, names=names)
+            table.index = new_index
+            table = table.loc[table.index.dropna()]
+            
+            return table
+
+        else:
+            pass
+
+        '''
+        index = [self.get_coded_var(var) for var in index_vars]
+        columns = [self.get_coded_var(var) for var in columns_vars]
+        if values is not None:
+            if aggfunc == 'mean':
+                aggfunc = mean_weight
+            elif aggfunc == 'median':
+                aggfunc = median_weight
+            elif aggfunc == 'std':
+                aggfunc = std_weight
+
+            return pd.crosstab(index=index,
+                           columns=columns,
+                           values=self.df[values],
+                           aggfunc=lambda s: aggfunc(s,
+                                                     self.df[self.weight_var],
+                                                     threshold))
+        else:
+            return pd.crosstab(index=index,
+                               columns=columns,
+                               values=self.df[self.weight_var],
+                               aggfunc='sum',
+                               normalize=normalize,
+                               margins=margins,
+                               margins_name=margins_name)
+                               '''

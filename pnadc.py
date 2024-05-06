@@ -1,7 +1,10 @@
 import os
 import zipfile
 
-from .common import handleDatabase
+from bs4 import BeautifulSoup
+import requests
+
+from .common import handleDatabase, parse_sas
 from .definitions import RAW_FILES_PATH
 
 PATH = 'pnadc'
@@ -68,7 +71,6 @@ class handlePNADc(handleDatabase):
         return self.df
 
     def make_database_dict(self):
-        db_dict = collections.defaultdict(list)
         url = os.path.join(URL, 'Documentacao') 
         r = self.medium.get(url)   
         soup = BeautifulSoup(r.text, 'html.parser')
@@ -81,43 +83,9 @@ class handlePNADc(handleDatabase):
                 f.write(r.content)
 
         with zipfile.ZipFile(filepath) as zf:
+            fp = [fp for fp in zf.filelist()
             with zf.open('input_trimestral.txt') as f:
-                for line in f.readlines():
-                    if not line.startswith(b'@'):
-                        continue
-
-                    l = line.decode('latin-1')
-                    
-                    posicao, codigo, tipo, descricao = l.split(maxsplit=3)
-                    
-                    posicao = int(posicao[1:]) - 1
-                    descricao = descricao.strip().strip('/*/ ')
-                    if descricao.startswith('Peso REPLICADO'):
-                        continue
-                    if tipo[0] == '$':
-                        tamanho = int(tipo[1:-1])
-                        tipo = 'category'
-                        
-                    else:
-                        tamanho = int(tipo[:-1])
-                        tipo = ''
-                    
-                    db_dict['posicao'].append(posicao)
-                    db_dict['codigo'].append(codigo)
-                    db_dict['tipo'].append(tipo)
-                    db_dict['tamanho'].append(tamanho)
-                    db_dict['descricao'].append(descricao)
-    
-        df_dict = pd.DataFrame(db_dict)
-        self.colspecs = [(pos, pos+size) for pos, size in
-                   df_dict[['pos', 'size']].itertuples(index=False, name=None)]
-
-        self.dtypes = {key: type for key, type in
-                    df_dict[['key', 'type']].itertuples(index=False, name=None)
-                       if type}
-
-        self.database_dict = df_dict
-        return self.database_dict
+                parse_sas(self, f, encoding='latin-1')
 
     def otimize_df(self):
         for col in self.df.select_dtypes('float'):

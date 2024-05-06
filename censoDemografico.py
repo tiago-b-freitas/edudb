@@ -1,9 +1,12 @@
 import collections
 import glob
 import os
+import shutil
 import zipfile
 
 import pandas as pd
+import pyreadstat
+import py7zr
 import requests
 
 from .common import handleDatabase, mean_weight, std_weight, median_weight,\
@@ -13,6 +16,10 @@ from .definitions import FILETYPES_PATH, RAW_FILES_PATH, UF_SIGLA_NOME, SUPPORTE
 PATH = 'censo-demografico'
 
 URL = {
+    1960: 'https://drive.google.com/uc?export=download&id=1ehlPo10QweI9xCj_3L6QnYRNfEnGP1nv',
+    1970: 'https://drive.usercontent.google.com/download?id=1lcvKVIuBYczyx31CB7tRhyHxHcdjqb4A&export=download&authuser=0&confirm=t&uuid=a3100044-2435-4d25-85ce-9fb5b781c30b&at=APZUnTV0fb2psgi8DTGdzjna9YcP%3A1714616660467',
+    1980: 'https://drive.usercontent.google.com/download?id=1gOCtxn9rbGTzvBzHDIf7iseljTnBgBH2&export=download&authuser=0&confirm=t&uuid=a919e85e-a488-445a-936c-3e9458d53e96&at=APZUnTWPnlNZOt3fnD61ovUYjP1j%3A1714687784460',
+    1991: 'https://drive.usercontent.google.com/download?id=1T3yAwWwkqDZ4K-macO0bDg42YKh2juKF&export=download&authuser=0&confirm=t&uuid=3c130385-83bd-4130-a70e-cb79250c6194&at=APZUnTXmK7duBJ3DOcDagyXGaSQ2%3A1714688091118',
     2000: 'https://ftp.ibge.gov.br/Censos/Censo_Demografico_2000/Microdados',
     2010: 'https://ftp.ibge.gov.br/Censos/Censo_Demografico_2010/Resultados_Gerais_da_Amostra/Microdados'}
 
@@ -25,23 +32,42 @@ CRITERION = ('[file_url["href"] for file_url in soup.find_all("a")'
                                ' and f"{self.uf}" in file_url["href"]]')
 
 DOCUMENTACAO = {
-    'PESS': {2000: 'LE PESSOAS.sas',
+    'PESS': {1960: '', #TODO
+             1970: 'Censo 1970/Documentação/Amostra 1970 vol03.doc',
+             1980: '', #TODO
+             1991: '', #TODO
+             2000: 'LE PESSOAS.sas',
              2010: 'Layout_microdados_Amostra.xls'},
-    'DOMI': {2000: 'LE DOMIC.sas',
+    'DOMI': {1970: 'Censo 1970/Documentação/Amostra 1970 vol03.doc',
+             1980: '', #TODO
+             1991: '', #TODO
+             2000: 'LE DOMIC.sas',
              2010: 'Layout_microdados_Amostra.xls'}
 }
 
 WEIGHTS = {
+    1960: None,
+    1970: 'V054',
+    1980: '', #TODO
+    1991: '', #TODO
     2000: 'P001',
     2010: 'V0010',
 }
 
+RAW_FILENAME = {
+    1960: 'Censo Demográfico de 1960.7z',
+    1970: 'Censo Demográfico de 1970.7z',
+    1980: 'Censo Demográfico de 1980.7z',
+    1991: 'Censo Demográfico de 1991.7z',
+}
+
+
 class handleCensoDemografico(handleDatabase):
     def __init__(self, year, uf, type_db, medium=requests):
-        if year not in (2000, 2010):
+        if year not in (1960, 1970, 1980, 1991, 2000, 2010):
             print_error(f'Ano {year} não implementado.')
             raise ValueError 
-        if uf not in UF_SIGLA_NOME and uf != 'all':
+        if uf not in UF_SIGLA_NOME and uf.upper() != 'ALL':
             print_error(f'UF {uf} não implementada. As opções válidas são'
                         f'{UF_SIGLA_NOME.keys()} e "all"')
             raise ValueError
@@ -53,8 +79,10 @@ class handleCensoDemografico(handleDatabase):
         self.type_db = type_db
         self.uf = uf.upper()
         super().__init__(medium, year)
-        self.name = 'Censo Demográfico'
         self.filename = f'{self.year}-{self.type_db}-{self.uf}-censo-demografico'
+        self.name = 'Censo Demográfico'
+        self.doc_filename = DOCUMENTACAO[self.type_db][self.year]
+        self.weight_var = WEIGHTS[self.year] 
         self.path = os.path.join(self.root, PATH)
         if not os.path.isdir(self.path):
             os.mkdir(self.path)
@@ -65,15 +93,20 @@ class handleCensoDemografico(handleDatabase):
         self.raw_files_path = os.path.join(self.path, RAW_FILES_PATH)
         if not os.path.isdir(self.raw_files_path):
             os.mkdir(self.raw_files_path)
+        if self.year < 2000:
+            self.raw_filename = RAW_FILENAME[self.year]
+            self.raw_filepath = os.path.join(self.raw_files_path, self.raw_filename)
         self.url = URL[year]
-        self.doc_filename = DOCUMENTACAO[self.type_db][self.year]
+
         self.is_zipped = True
-        self.weight_var = WEIGHTS[self.year] 
 
     def get_url(self):
-        criterion = CRITERION_ALL if self.uf == 'ALL' else CRITERION
-        file_urls = super().get_url(criterion, unique=False)
-        self.file_urls = [os.path.join(self.url, file_url)
+        if self.year < 2000:
+            self.file_urls = [self.url]
+        else:
+            criterion = CRITERION_ALL if self.uf == 'ALL' else CRITERION
+            file_urls = super().get_url(criterion, unique=False)
+            self.file_urls = [os.path.join(self.url, file_url)
                           for file_url in file_urls]
         return self.file_urls
 
@@ -123,15 +156,22 @@ class handleCensoDemografico(handleDatabase):
 
                         self.df_dict.columns = ['var', 'name', 'pos', 'end_pos',
                                                 'int_part', 'frac_part', 'type']
+    def unzip_1960a1991(self):
+        with py7zr.SevenZipFile(self.raw_filepath) as zf:
+            targets_ = [f for f in zf.getnames() if os.path.splitext(f)[-1] == '.sav'][0]
+        dir_path, filename = os.path.split(targets_)
+        targets = [dir_path, targets_]
+        tmp_path = os.path.join(self.raw_files_path, 'tmp')
+        with py7zr.SevenZipFile(self.raw_filepath) as zf:
+            zf.extract(path=tmp_path, targets=targets)
 
+        file_path = os.path.join(tmp_path, targets_)
+        self.df, self.meta = pyreadstat.read_sav(file_path)
+        shutil.rmtree(tmp_path)
 
-
-    def unzip(self):
-        if not hasattr(self, 'filepaths'):
-            self.get_save_raw_database()
+    def unzip_2000e2010(self):
         if not hasattr(self, 'database_dict'):
             self.make_database_dict()
-
         match self.type_db:
             case 'PESS':
                 criterion = 'PES'
@@ -163,6 +203,16 @@ class handleCensoDemografico(handleDatabase):
             for col, dtype in self.dtypes.items():
                 if self.df[col].dtype != dtype:
                     self.df[col] = self.df[col].astype(dtype)
+
+    def unzip(self):
+        if not hasattr(self, 'filepaths'):
+            self.get_save_raw_database()
+
+        if self.year < 2000:
+            self.unzip_1960a1991()
+        else:
+            self.unzip_2000e2010()
+
         return self.df
 
     def str_to_float(self, s, int_part, frac_part):
@@ -172,6 +222,28 @@ class handleCensoDemografico(handleDatabase):
         return float(s[:int_part] + '.' + s[int_part:])
 
     def preprocess_df(self):
+        if self.year < 2000: 
+            self.preprocess_df_1960a1991()
+        else:
+            self.preprocess_df_2000e2010()
+        return self.df
+
+    def preprocess_df_1960a1991(self):
+        if self.year == 1980:
+            self.df.drop(columns=['D_R'], inplace=True) #coluna vazia
+
+        for col in self.df.columns:
+            dtype = self.get_min_int_dtype()
+            try:
+                self.df[col] = self.df[col].abs().astype(dtype)
+            except TypeError:
+                self.df[col] = self.df[col].abs().astype('Float64')
+        for col in self.meta.variable_value_labels.keys():
+            self.df[col] = self.df[col].astype('string')
+            self.df[col] = self.df[col].astype('category')
+
+
+    def preprocess_df_2000e2010(self):
         if not hasattr(self, 'df'):
             self.unzip()
         float_vars = self.df_dict.loc[self.df_dict.frac_part.notna(),
@@ -186,6 +258,7 @@ class handleCensoDemografico(handleDatabase):
         for col in self.df.select_dtypes('string').columns:
             if self.year in (2000, 2010) and col == 'V0300':
                 continue
+            #TODO Refactorization use get_min_int_dtype
             tmp =  pd.to_numeric(self.df[col])
             max_ = tmp.max()
             if max_ >= 2**32:
@@ -211,15 +284,48 @@ class handleCensoDemografico(handleDatabase):
         dict_vars[var].update(missing_values)
 
     def make_map_dict(self):
-        match self.year:
-            case 2000:
-                df = self.make_map_dict_2010()
-            case 2010:
-                df = self.make_map_dict_2000()
+        if self.year < 2000:
+            self.map_dict_vars = self.make_map_dict_1960a1991()
+        elif self.year == 2000:
+            self.map_dict_vars = self.make_map_dict_2000()
+        elif self.year == 2010:
+            self.map_dict_vars = self.make_map_dict_2010()
+        return self.map_dict_vars
+
+    def make_map_dict_1960a1991(self):
+        if not hasattr(self, 'meta'):
+            with py7zr.SevenZipFile(self.raw_filepath) as zf:
+                targets_ = [f for f in zf.getnames() if os.path.splitext(f)[-1] == '.sav'][0]
+            dir_path, filename = os.path.split(targets_)
+            targets = [dir_path, targets_]
+            tmp_path = os.path.join(self.raw_files_path, 'tmp')
+            with py7zr.SevenZipFile(self.raw_filepath) as zf:
+                zf.extract(path=tmp_path, targets=targets)
+
+            file_path = os.path.join(tmp_path, targets_)
+            _, self.meta = pyreadstat.read_sav(file_path, metadataonly=True)
+            shutil.rmtree(tmp_path)
+
+        
+        map_var_dict = {}
+        for key in self.meta.column_names:
+            dict_map = self.meta.variable_value_labels.get(key, pd.NA)
+            if pd.notna(dict_map):
+                map_var_dict[key] = {str(int(k)): v for k, v in dict_map.items()}
+
+        df = pd.DataFrame({'COD_VAR': [key for key in self.meta.column_names],
+                           'NOME_VAR': [self.meta.column_names_to_labels.get(key, pd.NA) 
+                                        for key in self.meta.column_names],
+                           'MAP_VAR': [map_var_dict.get(key, pd.NA)
+                                       for key in self.meta.column_names]})
+        df.to_excel(f'{self.path_dict}.xlsx', index=False)
+        df.to_pickle(f'{self.path_dict}.pickle')
         return df
 
+
     def make_map_dict_2000(self):
-        ...
+        #TODO
+        pass
 
     def make_map_dict_2010(self):
         path = 'Documentação/Anexos Auxiliares'
@@ -357,82 +463,24 @@ class handleCensoDemografico(handleDatabase):
         df.to_pickle(f'{self.path_dict}.pickle')
         return df
 
-
-    def get_map_var(self, var):
-        if not os.path.isfile(f'{self.path_dict}.pickle'):
-            print_info('Dicionário da base não existente. Construindo...')
-            df = self.make_map_dict()
-            print_info('Dicionário concluído com sucesso!')
-        else:
-            df = pd.read_pickle(f'{self.path_dict}.pickle')
-
-        if var == 'all':
-            return df
-
-        nome = df.loc[df.COD_VAR == var, 'NOME_VAR'].values[0]
-        vars_cod = df.loc[df.COD_VAR == var, 'MAP_VAR'].values[0]
-        return nome, vars_cod
-
     def get_coded_var(self, var):
-        if var == 'V0002':
-            col = self.cod_mun
-        elif var == 'V1002':
-            col = self.cod_meso
-        elif var == 'V1003':
-            col = self.cod_micro
+        if self.year == 2010:
+            if var == 'V0002':
+                col = self.cod_mun
+            elif var == 'V1002':
+                col = self.cod_meso
+            elif var == 'V1003':
+                col = self.cod_micro
+            else:
+                col = self.df[var]
         else:
             col = self.df[var]
         return col.map(self.get_map_var(var)[1])
 
-    def crosstab(self,
-                 index_vars,
-                 columns_vars,
-                 values=None,
-                 aggfunc='mean',
-                 threshold=0,
-                 normalize=False,
-                 margins=False,
-                 margins_name='All'):
-        index = [self.get_coded_var(var) for var in index_vars]
-        columns = [self.get_coded_var(var) for var in columns_vars]
-        if values is not None:
-            if aggfunc == 'mean':
-                aggfunc = mean_weight
-            elif aggfunc == 'median':
-                aggfunc = median_weight
-            elif aggfunc == 'std':
-                aggfunc = std_weight
-
-            return pd.crosstab(index=index,
-                           columns=columns,
-                           values=self.df[values],
-                           aggfunc=lambda s: aggfunc(s,
-                                                     self.df[self.weight_var],
-                                                     threshold))
-        else:
-            return pd.crosstab(index=index,
-                               columns=columns,
-                               values=self.df[self.weight_var],
-                               aggfunc='sum',
-                               normalize=normalize,
-                               margins=margins,
-                               margins_name=margins_name)
-
-    def get_df(self, filetype='parquet', **kwargs):
-        df = super().get_df(filetype, **kwargs)
-        if self.year == 2010:
-            self.cod_mun = (self.df.V0001.astype('string')
-                            + self.df.V0002.astype('string')).astype('category')
-            self.cod_meso = (self.df.V0001.astype('string')
-                            + self.df.V1002.astype('string')).astype('category')
-            self.cod_micro = (self.df.V0001.astype('string')
-                            + self.df.V1003.astype('string')).astype('category')
-        return df
-
     def get_df(self, filetype='parquet', **kwargs):
         if filetype not in SUPPORTED_FTs:
             raise ValueError
-        if self.uf == 'ALL':
+        if self.uf == 'ALL' and self.year >= 2000:
             self.dir_path = os.path.join(self.path, FILETYPES_PATH[filetype])
             if not os.path.isdir(self.dir_path):
                 os.mkdir(self.dir_path)
@@ -461,7 +509,7 @@ class handleCensoDemografico(handleDatabase):
             print_info('Todas as ufs já foram processadas, preparando para juntá-las')
             self.df = pd.DataFrame()
             for f in all_ufs:
-                print(f)
+                print_info(f'Anexando o arquivo {f} no DataFrame')
                 df_tmp = pd.read_parquet(f)
                 self.df = pd.concat([self.df, df_tmp], ignore_index=True)
 
@@ -473,5 +521,13 @@ class handleCensoDemografico(handleDatabase):
             self.save(filetype=self.filetype)
             return self.df
         else:
-            return super.get_df(filetype, **kwargs)
+            self.df = super().get_df(filetype, **kwargs)
+            if self.year == 2010:
+                self.cod_mun = (self.df.V0001.astype('string')
+                                + self.df.V0002.astype('string')).astype('category')
+                self.cod_meso = (self.df.V0001.astype('string')
+                                + self.df.V1002.astype('string')).astype('category')
+                self.cod_micro = (self.df.V0001.astype('string')
+                                + self.df.V1003.astype('string')).astype('category')
+            return self.df
 
