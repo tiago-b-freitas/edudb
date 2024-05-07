@@ -328,48 +328,61 @@ class handleDatabase:
             index_vars = [index_vars]
         if not isinstance(columns_vars, list):
             columns_vars = [columns_vars]
+        vars_g = [*index_vars, *columns_vars] if columns_vars[0] is not None else index_vars
         if values is None:
-            vars_g = [*index_vars, *columns_vars] if columns_vars[0] is not None else index_vars
             table = self.df.groupby(vars_g, observed=False)[self.weight_var].sum()
-            
-            index_mapper = [self.get_map_var(v) for v in index_vars]
-            columns_mapper = [self.get_map_var(v) for v in columns_vars if v is not None]
+        else:
+            match aggfunc:
+                case 'mean':
+                    aggfunc = mean_weight
+                case 'median':
+                    aggfunc = median_weight
+                case 'std':
+                    aggfunc = std_weight
+            table = (self.df.groupby(vars_g, observed=False)[values]
+                            .apply(lambda g:
+                                aggfunc(g,
+                                        self.df[self.weight_var],
+                                                     threshold)))
+        
+        index_mapper = [self.get_map_var(v) for v in index_vars]
+        columns_mapper = [self.get_map_var(v) for v in columns_vars if v is not None]
 
-            if columns_mapper:
-                table = table.unstack(list(range(-1, -len(columns_mapper)-1, -1)))
-                iter_levels = []
-                names = []
-                for level, (name, map_var) in enumerate(columns_mapper):
-                    iter_levels.append(table.columns.get_level_values(level).map(map_var))
-                    names.append(name)
-                new_columns = pd.MultiIndex.from_arrays(iter_levels, names=names)
-                table.columns = new_columns
-                table = table[table.columns.dropna()]
-
+        if columns_mapper:
+            table = table.unstack(list(range(-1, -len(columns_mapper)-1, -1)))
             iter_levels = []
             names = []
-            for level, (name, map_var) in enumerate(index_mapper):
-                iter_levels.append(table.index.get_level_values(level).map(map_var))
+            for level, (name, map_var) in enumerate(columns_mapper):
+                iter_levels.append(table.columns.get_level_values(level).map(map_var))
                 names.append(name)
-            new_index = pd.MultiIndex.from_arrays(iter_levels, names=names)
-            table.index = new_index
-            table = table.loc[table.index.dropna()]
-            
-            return table
+            new_columns = pd.MultiIndex.from_arrays(iter_levels, names=names)
+            table.columns = new_columns
+            table = table[table.columns.dropna()]
 
+        iter_levels = []
+        names = []
+        for level, (name, map_var) in enumerate(index_mapper):
+            iter_levels.append(table.index.get_level_values(level).map(map_var))
+            names.append(name)
+        new_index = pd.MultiIndex.from_arrays(iter_levels, names=names)
+        table.index = new_index
+        table = table.loc[table.index.dropna()]
+        
+        if values is not None:
+            return table
         else:
-            pass
+            n = str(normalize)
+            if n in ('index', '0'):
+                return table.div(table.sum(axis=normalize))
+            elif n in ('columns', '1'):     
+                return table.div(table.sum(axis=normalize), axis='index')
+            else:
+                return table.astype('UInt64')
 
         '''
         index = [self.get_coded_var(var) for var in index_vars]
         columns = [self.get_coded_var(var) for var in columns_vars]
         if values is not None:
-            if aggfunc == 'mean':
-                aggfunc = mean_weight
-            elif aggfunc == 'median':
-                aggfunc = median_weight
-            elif aggfunc == 'std':
-                aggfunc = std_weight
 
             return pd.crosstab(index=index,
                            columns=columns,
