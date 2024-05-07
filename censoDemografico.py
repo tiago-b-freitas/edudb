@@ -25,11 +25,13 @@ URL = {
 
 TYPES = ('PESS', 'DOMI')
 
-CRITERION_ALL = ('[file_url["href"] for file_url in soup.find_all("a")'
-                               ' if "zip" in file_url["href"]]')
-CRITERION = ('[file_url["href"] for file_url in soup.find_all("a")'
+EXPR_FILTER = {
+    'ALL': ('[file_url["href"] for file_url in soup.find_all("a")'
+                               ' if "zip" in file_url["href"]]'),
+    '_' :('[file_url["href"] for file_url in soup.find_all("a")'
                                ' if "zip" in file_url["href"]' 
                                ' and f"{self.uf}" in file_url["href"]]')
+}
 
 DOCUMENTACAO = {
     'PESS': {1960: '', #TODO
@@ -97,17 +99,16 @@ class handleCensoDemografico(handleDatabase):
             self.raw_filename = RAW_FILENAME[self.year]
             self.raw_filepath = os.path.join(self.raw_files_path, self.raw_filename)
         self.url = URL[year]
-
+        self.expr_filter = EXPR_FILTER[self.uf if self.uf == 'ALL' else '_']
         self.is_zipped = True
 
     def get_url(self):
         if self.year < 2000:
             self.file_urls = [self.url]
         else:
-            criterion = CRITERION_ALL if self.uf == 'ALL' else CRITERION
             file_urls = super().get_url(criterion, unique=False)
             self.file_urls = [os.path.join(self.url, file_url)
-                          for file_url in file_urls]
+                              for file_url in file_urls]
         return self.file_urls
 
     def get_save_raw_database(self):

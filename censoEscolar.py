@@ -4,7 +4,7 @@ import zipfile
 from .common import handleDatabase, RAW_FILES_PATH
 PATH = 'censo-escolar'
 URL = 'https://www.gov.br/inep/pt-br/acesso-a-informacao/dadosabertos/microdados/censo-escolar'
-CRITERION = ('[file_url["href"] for file_url in soup.find("div",'
+EXPR_FILTER = ('[file_url["href"] for file_url in soup.find("div",'
                            ' id="content-core").find_all("a")'
                            ' if str(self.year) in file_url["href"]]')
 CERT = 'inep-gov-br-chain.pem'
@@ -23,11 +23,7 @@ class handleCensoEscolar(handleDatabase):
             os.mkdir(self.raw_files_path)
         self.url = URL
         self.is_zipped = True
-
-    def get_url(self):
-        criterion = CRITERION
-        file_url = super().get_url(criterion)
-        return self.file_url
+        self.expr_filter = EXPR_FILTER
 
     def get_save_raw_database(self):
         cert = os.path.join('.', CERT_PATH, CERT)

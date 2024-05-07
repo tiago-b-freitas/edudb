@@ -10,7 +10,7 @@ from .definitions import RAW_FILES_PATH
 
 PATH = 'pnadc'
 URL = 'http://ftp.ibge.gov.br/Trabalho_e_Rendimento/Pesquisa_Nacional_por_Amostra_de_Domicilios_continua/Trimestral/Microdados'
-CRITERION = ('[self.url+"/"+a["href"] for a in soup.find_all("a")'
+EXPR_FILTER = ('[self.url+"/"+a["href"] for a in soup.find_all("a")'
                 'if str(self.trimester).zfill(2)+str(self.year) in a["href"]]')
 FIRST_YEAR = 2012
 LAST_YEAR = 2023
@@ -44,16 +44,12 @@ class handlePNADc(handleDatabase):
         self.filename = f'{self.year}-{self.trimester}-PNADc'
         self.weight_var = WEIGHTS
         self.is_otimized = True
+        self.expr_filter = EXPR_FILTER
 
     def basic_names(self):
         return [f'Base de dados = "{self.name}"',
                 f'Ano = "{self.year}"',
                 f'Trimestre = "{self.trimester}"']
-
-    def get_url(self):
-        criterion = CRITERION
-        file_url = super().get_url(criterion)
-        return self.file_url
 
     def unzip(self):
         if not hasattr(self, 'filepath'):

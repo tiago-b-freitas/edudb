@@ -153,7 +153,15 @@ class handleDatabase:
             with open(filename, 'wb') as f:
                 f.write(content)
 
-    def get_url(self, criterion, unique=True, cert=True):
+    def get_cert(self):
+        if hasattr(self, 'cert_path'):
+            cert = self.cert_path
+        else:
+            cert = True
+        return cert
+
+
+    def get_url(self, unique=True):
         if hasattr(self, 'file_url'):
             print_info('Endereço já existente.',
                        *self.basic_names(),
@@ -163,10 +171,11 @@ class handleDatabase:
         print_info('Obtendo endereço para extração da Base de dados.',
                    *self.basic_names(),
                    f'Endereço da busca = {self.url}')
-        r = self.medium.get(self.url, verify=cert)
+        r = self.medium.get(self.url, verify=get_cert())
         soup = BeautifulSoup(r.text, 'html.parser')
-        file_urls = eval(criterion, {'self': self, 'unquote_plus': unquote_plus},
-                                    {'soup': soup})
+        file_urls = eval(self.expr_filter, {'self': self,
+                                            'unquote_plus': unquote_plus},
+                                           {'soup': soup})
         if unique:
             self.assert_url(file_urls)
             self.file_url = unquote_plus(file_urls[0])
@@ -178,7 +187,7 @@ class handleDatabase:
         print_info(f'Endereço(s) {self.file_url} obtido com sucesso!')
         return self.file_url
 
-    def get_save_raw_database(self, cert=True):
+    def get_save_raw_database(self):
         if not hasattr(self, 'file_url'):
             self.get_url()
         if hasattr(self, 'raw_filename'):
@@ -190,7 +199,7 @@ class handleDatabase:
             print_info(f'{filepath} já existente.')
             return filepath
         print_info(f'{filepath} não existente. Fazendo download.')
-        r = self.medium.get(self.file_url, verify=cert)
+        r = self.medium.get(self.file_url, verify=get_cert(cert))
         print_info('Download concluído!',
                   f'Gravando arquivo.')
         with open(filepath, 'wb') as f:
@@ -378,24 +387,3 @@ class handleDatabase:
                 return table.div(table.sum(axis=normalize), axis='index')
             else:
                 return table.astype('UInt64')
-
-        '''
-        index = [self.get_coded_var(var) for var in index_vars]
-        columns = [self.get_coded_var(var) for var in columns_vars]
-        if values is not None:
-
-            return pd.crosstab(index=index,
-                           columns=columns,
-                           values=self.df[values],
-                           aggfunc=lambda s: aggfunc(s,
-                                                     self.df[self.weight_var],
-                                                     threshold))
-        else:
-            return pd.crosstab(index=index,
-                               columns=columns,
-                               values=self.df[self.weight_var],
-                               aggfunc='sum',
-                               normalize=normalize,
-                               margins=margins,
-                               margins_name=margins_name)
-                               '''

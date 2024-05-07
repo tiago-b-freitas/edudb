@@ -5,7 +5,7 @@ from .common import handleDatabase, RAW_FILES_PATH
 
 PATH = 'rendimento-escolar'
 URL = 'https://www.gov.br/inep/pt-br/acesso-a-informacao/dados-abertos/indicadores-educacionais/taxas-de-rendimento-escolar'
-CRITERION = ('[a["href"] for a in soup.find("div",'
+EXPR_FILTER = ('[a["href"] for a in soup.find("div",'
                                 ' id="parent-fieldname-text").find_all("a")'
                                 ' if self.agg_level in a["href"].lower()]')
 CERT = 'inep-gov-br-chain.pem'
@@ -101,11 +101,7 @@ class handleRendimentoEscolar(handleDatabase):
         self.url = f'{URL}/{year}'
         self.is_zipped = True
         self.filename = f'{self.year}-{self.agg_level}-rendimento-escolar'
-
-    def get_url(self):
-        criterion = CRITERION
-        file_url = super().get_url(criterion)
-        return self.file_url
+        self.expr_filter = EXPR_FILTER
 
     def get_save_raw_database(self):
         cert = os.path.join('.', CERT_PATH, CERT)
