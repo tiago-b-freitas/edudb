@@ -141,25 +141,12 @@ class handleDatabase:
         self.is_stardardized = False
         self.SUPPORTED_FTs = ('feather', 'parquet')
 
-    def get_database(self, medium, url, cert=True):
-        r = medium.get(url, verify=cert)
-        return r
-
-    def save_database(self, content, filename):
-        if isinstance(content, str):
-            with open(filename, 'w', encoding='utf-8') as f:
-                f.write(content)
-        else:
-            with open(filename, 'wb') as f:
-                f.write(content)
-
     def get_cert(self):
         if hasattr(self, 'cert_path'):
             cert = self.cert_path
         else:
             cert = True
         return cert
-
 
     def get_url(self, unique=True):
         if hasattr(self, 'file_url'):
@@ -171,7 +158,7 @@ class handleDatabase:
         print_info('Obtendo endereço para extração da Base de dados.',
                    *self.basic_names(),
                    f'Endereço da busca = {self.url}')
-        r = self.medium.get(self.url, verify=get_cert())
+        r = self.medium.get(self.url, verify=self.get_cert())
         soup = BeautifulSoup(r.text, 'html.parser')
         file_urls = eval(self.expr_filter, {'self': self,
                                             'unquote_plus': unquote_plus},
@@ -199,7 +186,7 @@ class handleDatabase:
             print_info(f'{filepath} já existente.')
             return filepath
         print_info(f'{filepath} não existente. Fazendo download.')
-        r = self.medium.get(self.file_url, verify=get_cert(cert))
+        r = self.medium.get(self.file_url, verify=self.get_cert())
         print_info('Download concluído!',
                   f'Gravando arquivo.')
         with open(filepath, 'wb') as f:
@@ -294,7 +281,7 @@ class handleDatabase:
 
     def get_min_int_dtype(self):
         if self.df[col].dtype == 'object':
-            self.df[col] = self.df[col].astype(float).max()
+            self.df[col] = self.df[col].astype(float)
         max_ = self.df[col].max()
         if max_ >= 2**32:
             dtype = 'UInt64'
@@ -385,3 +372,4 @@ class handleDatabase:
                 return table.div(table.sum(axis=normalize), axis='index')
             else:
                 return table.astype('UInt64')
+
