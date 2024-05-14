@@ -50,31 +50,31 @@ def logging(type_, args):
     print(*[f'[{type_}] {msg}' for msg in args], sep='\n')
 
 
-def weight_stats(s, weights, threshold):
-    s.dropna(inplace=True)
-    if len(s) <= threshold:
+def weight_stats(df, threshold):
+    df.dropna(inplace=True)
+    if len(df) <= threshold:
         return False
-    return DescrStatsW(s, weights=weights[s.index])
+    return DescrStatsW(df.iloc[:, 0], df.iloc[:, 1])
 
 
-def mean_weight(s, weights, threshold):
-    ret = weight_stats(s, weights, threshold)
+def mean_weight(df, threshold):
+    ret = weight_stats(df, threshold)
     if ret:
         return ret.mean
     return pd.NA
 
 
-def std_weight(s, weights, threshold):
-    ret = weight_stats(s, weights, threshold)
+def std_weight(df, threshold):
+    ret = weight_stats(df, threshold)
     if ret:
         return ret.std
     return pd.NA
 
 
-def median_weight(s, weights, threshold):
-    ret = weight_stats(s, weights, threshold)
+def median_weight(df, threshold):
+    ret = weight_stats(df, threshold)
     if ret:
-        return ret.quantile(.5)
+        return ret.quantile(.5).squeeze(0)
     return pd.NA
 
 
@@ -348,11 +348,9 @@ class handleDatabase:
                     aggfunc = median_weight
                 case 'std':
                     aggfunc = std_weight
-            table = (self.df.groupby(vars_g, observed=False)[values]
+            table = (self.df.groupby(vars_g, observed=False)[[values, self.weight_var]]
                             .apply(lambda g:
-                                aggfunc(g,
-                                        self.df[self.weight_var],
-                                                     threshold)))
+                                aggfunc(g, threshold)))
         
         index_mapper = [self.get_map_var(v) for v in index_vars]
         columns_mapper = [self.get_map_var(v) for v in columns_vars if v is not None]
