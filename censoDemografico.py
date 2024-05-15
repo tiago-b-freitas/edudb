@@ -2,6 +2,7 @@ import collections
 import glob
 import os
 import shutil
+import re
 import zipfile
 
 import pandas as pd
@@ -323,10 +324,85 @@ class handleCensoDemografico(handleDatabase):
         df.to_pickle(f'{self.path_dict}.pickle')
         return df
 
-
     def make_map_dict_2000(self):
-        #TODO
-        pass
+        path = 'Arquivos Auxiliares'
+        external_vars = dict() 
+        docpath = glob.glob(f'{self.raw_files_path}/*[Dd]oc*.zip')[0]
+        with zipfile.ZipFile(docpath) as zf:
+
+            #V4250
+            with zf.open(os.path.join(path, 'Municipios-V4250.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string')
+            external_vars['V4250'] = {key.strip(): value.strip() for key, value
+                                      in df_.dropna().itertuples(False, None)}
+
+            #V4276
+            with zf.open(os.path.join(path, 'Municipios e Pais Estrangeiro - V4276.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string')
+            external_vars['V4276'] = {key.strip(): value.strip() for key, value
+                                      in df_.dropna().itertuples(False, None)}
+
+            #V4279
+            with zf.open(os.path.join(path, 'Estrutura ONU V4279.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', skiprows=3, na_values=[' '])
+            external_vars['V4279'] = {key.strip(): value.strip() for value, key
+                                      in df_.dropna(subset='CODIGO').itertuples(False, None)}
+
+            #V4239
+            with zf.open(os.path.join(path, 'Estrutura ONU V4239.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', skiprows=3, na_values=[' '])
+            external_vars['V4239'] = {key.strip(): value.strip() for value, key
+                                      in df_.dropna(subset='CODIGO').itertuples(False, None)}
+
+            #V4219 e V4269
+            with zf.open(os.path.join(path, 'Estrutura ONU V4219, V4269.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', skiprows=3, na_values=[' '])
+            var_ext_tmp = {key.strip(): value.strip() for value, key
+                           in df_.dropna(subset='CODIGO').itertuples(False, None)
+                           if key.isdigit()}
+            external_vars['V4219'] = var_ext_tmp 
+            external_vars['V4269'] = var_ext_tmp 
+
+            #V4230
+            with zf.open(os.path.join(path, 'Estrutura Migracao V4230.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', skiprows=2, na_values=[' '])
+            external_vars['V4230'] = {key.strip(): value.strip() for key, value
+                                      in df_.dropna(subset='CODIGOS').itertuples(False, None)
+                                      if key.isdigit()}
+
+            #V4210 e V4260
+            with zf.open(os.path.join(path, 'Estrutura Migracao V4210, V4260.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', skiprows=2, na_values=[' '])
+            var_ext_tmp = {key.strip(): value.strip() for key, value
+                           in df_.dropna(subset='CODIGO').itertuples(False, None)
+                           if key.isdigit()}
+            external_vars['V4210'] = var_ext_tmp
+            external_vars['V4260'] = var_ext_tmp
+
+            #V4355 e area_de_conhecimento
+            with zf.open(os.path.join(path, 'Cursos Superiores - Estrutura V4535.xls')) as f: #Houve algum erro de digitação, pois a variável correta é V4355, apesar de o arquivo se referir à variável V4535, a documentação também se refere ao documento com o mesmo nome que ele se encontra.
+                df_ = pd.read_excel(f, dtype='string', skiprows=5, na_values=[' '])
+            external_vars['V4355'] = {key.strip(): value.strip() for key, value
+                                      in df_.iloc[:, 1:].dropna(subset='Código').itertuples(False, None)
+                                      if key.isdigit()}
+            external_vars['V4355']['02'] = 'Não Superior'
+            external_vars['area_de_conhecimento'] = {}
+            areas = []
+            new_area = None
+            for e in df_.iloc[:, 0].dropna():
+                if e[0].isdigit():
+                    if new_area is not None:
+                        areas.append(new_area.strip())
+                    new_area = e
+                else:
+                    new_area += e
+            areas.append(new_area)
+            for e in areas:
+                key, value = e.split('-')
+                for k in re.findall(r'\d', key):
+                    external_vars['area_de_conhecimento'][k] = value.strip()
+
+        print(external_vars['area_de_conhecimento'])
 
     def make_map_dict_2010(self):
         path = 'Documentação/Anexos Auxiliares'
@@ -358,7 +434,7 @@ class handleCensoDemografico(handleDatabase):
                                         {'085': 'NÃO SABE E SUPERIOR NÃO ESPECIFICADO'})
 
             pat = re.compile(r'\d{4}')
-            with zf.open(os.path.join(path, 'Ocupaç╞o COD 2010.xls')) as f:
+            with zf.open(os.path.join(path, 'Ocupação COD 2010.xls')) as f:
                 df_ = pd.read_excel(f, skiprows=1, dtype='string')
             external_vars['V6461'] = {key: value for key, value
                                       in df_.iloc[:, 0:2]
