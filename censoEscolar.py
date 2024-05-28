@@ -12,7 +12,7 @@ CERT = 'inep-gov-br-chain.pem'
 
 class handleCensoEscolar(handleDatabase):
     def __init__(self, year, medium=requests):
-        super().__init__(medium, year)
+        super().__init__(year, medium)
         self.name = 'censo escolar'
         self.filename = 'censo-escolar'
         self.path = os.path.join(self.root, PATH)

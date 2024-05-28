@@ -29,7 +29,7 @@ class handlePNADc(handleDatabase):
                         f'stre {trimester}.')
             raise ValueError
 
-        super().__init__(medium, year)
+        super().__init__(year, medium)
         self.trimester = trimester
         self.name = 'PNADc'
         self.path = os.path.join(self.root, PATH)

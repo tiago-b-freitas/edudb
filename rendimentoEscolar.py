@@ -88,7 +88,7 @@ class handleRendimentoEscolar(handleDatabase):
                        f'{AGG_LEVEL_REN}')
             raise ValueError
 
-        super().__init__(medium, year)
+        super().__init__(year, medium)
         self.agg_level = agg_level
         self.name = 'Rendimento Escolar'
         self.path = os.path.join(self.root, PATH, self.agg_level)

@@ -128,7 +128,7 @@ def parse_sas(self, f, encoding, ignore=False):
 
 
 class handleDatabase:
-    def __init__(self, medium, year):
+    def __init__(self, year, medium=requests):
         self.medium = medium
         self.year = year
         with open('root.txt', 'r', encoding='utf-8') as f:
@@ -174,19 +174,23 @@ class handleDatabase:
         print_info(f'Endereço(s) {self.file_url} obtido com sucesso!')
         return self.file_url
 
-    def get_save_raw_database(self):
+    def get_save_raw_database(self, file_url=None):
         if not hasattr(self, 'file_url'):
             self.get_url()
-        if hasattr(self, 'raw_filename'):
-            filename = self.raw_filename
+        if file_url is not None:
+            filename = os.path.basename(file_url)
         else:
-            filename = os.path.split(self.file_url)[-1]
+            file_url = self.file_url
+            if hasattr(self, 'raw_filename'):
+                filename = self.raw_filename
+            else:
+                filename = os.path.basename(self.file_url)
         filepath = os.path.join(self.raw_files_path, filename)
         if os.path.isfile(filepath):
             print_info(f'{filepath} já existente.')
             return filepath
         print_info(f'{filepath} não existente. Fazendo download.')
-        r = self.medium.get(self.file_url, verify=self.get_cert())
+        r = self.medium.get(file_url, verify=self.get_cert())
         print_info('Download concluído!',
                   f'Gravando arquivo.')
         with open(filepath, 'wb') as f:
@@ -318,7 +322,13 @@ class handleDatabase:
                  threshold=0,
                  normalize=False,
                  margins=False,
-                 margins_name='All'):
+                 margins_name='All',
+                 filter_=None):
+
+        if filter_ is None:
+            df = self.df
+        else:
+            df = self.df[filter_]
 
         if not isinstance(index_vars, list):
             index_vars = [index_vars]
@@ -326,7 +336,10 @@ class handleDatabase:
             columns_vars = [columns_vars]
         vars_g = [*index_vars, *columns_vars] if columns_vars[0] is not None else index_vars
         if values is None:
-            table = self.df.groupby(vars_g, observed=False)[self.weight_var].sum()
+            if self.weight_var is None:
+                table = df.groupby(vars_g, observed=False).size()
+            else:
+                table = df.groupby(vars_g, observed=False)[self.weight_var].sum()
         else:
             match aggfunc:
                 case 'mean':
@@ -335,7 +348,7 @@ class handleDatabase:
                     aggfunc = median_weight
                 case 'std':
                     aggfunc = std_weight
-            table = (self.df.groupby(vars_g, observed=False)[[values, self.weight_var]]
+            table = (df.groupby(vars_g, observed=False)[[values, self.weight_var]]
                             .apply(lambda g:
                                 aggfunc(g, threshold)))
         

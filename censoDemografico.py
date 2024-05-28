@@ -1,10 +1,13 @@
 import collections
 import glob
+import io
 import os
+import subprocess
 import shutil
 import re
 import zipfile
 
+import docx
 import pandas as pd
 import pyreadstat
 import py7zr
@@ -51,8 +54,8 @@ DOCUMENTACAO = {
 WEIGHTS = {
     1960: None,
     1970: 'V054',
-    1980: '', #TODO
-    1991: '', #TODO
+    1980: 'V604',
+    1991: 'V7301',
     2000: 'P001',
     2010: 'V0010',
 }
@@ -64,6 +67,16 @@ RAW_FILENAME = {
     1991: 'Censo Demográfico de 1991.7z',
 }
 
+VARS = {
+    'sexo': {
+             1960: None,
+             1970: 'V054',
+             1980: '', #TODO
+             1991: '', #TODO
+             2000: 'P001',
+             2010: 'V0010',
+    },
+}
 
 class handleCensoDemografico(handleDatabase):
     def __init__(self, year, uf, type_db, medium=requests):
@@ -81,7 +94,7 @@ class handleCensoDemografico(handleDatabase):
 
         self.type_db = type_db
         self.uf = uf.upper()
-        super().__init__(medium, year)
+        super().__init__(year, medium)
         self.filename = f'{self.year}-{self.type_db}-{self.uf}-censo-demografico'
         self.name = 'Censo Demográfico'
         self.doc_filename = DOCUMENTACAO[self.type_db][self.year]
@@ -116,8 +129,7 @@ class handleCensoDemografico(handleDatabase):
         self.get_url()
         self.filepaths = []
         for file_url in self.file_urls:
-            self.file_url = file_url
-            filepath = super().get_save_raw_database()
+            filepath = super().get_save_raw_database(file_url)
             self.filepaths.append(filepath)
 
     def make_database_dict(self):
@@ -285,6 +297,18 @@ class handleCensoDemografico(handleDatabase):
                             if pat.search(key)}
         dict_vars[var].update(missing_values)
 
+    def doc2docx(self, zf, path, filename):
+            tmp_filepath0 = os.path.join(self.raw_files_path, '~tmp.doc')
+            tmp_filepath1 = os.path.join(self.raw_files_path, '~tmp.docx')
+            with zf.open(os.path.join(path, filename)) as f:
+                with open(tmp_filepath0, 'wb') as f_tmp:
+                    f_tmp.write(f.read())
+            subprocess.run(['lowriter', '--convert-to', 'docx', tmp_filepath0, '--outdir', self.raw_files_path])
+            wordDoc = docx.Document(tmp_filepath1)
+            os.remove(tmp_filepath0)
+            os.remove(tmp_filepath1)
+            return wordDoc
+
     def make_map_dict(self):
         if self.year < 2000:
             self.map_dict_vars = self.make_map_dict_1960a1991()
@@ -328,33 +352,33 @@ class handleCensoDemografico(handleDatabase):
         path = 'Arquivos Auxiliares'
         external_vars = dict() 
         docpath = glob.glob(f'{self.raw_files_path}/*[Dd]oc*.zip')[0]
-        with zipfile.ZipFile(docpath) as zf:
+        with zipfile.ZipFile(docpath, metadata_encoding='cp850') as zf:
 
-            #V4250
+            #V4250 = Municípios
             with zf.open(os.path.join(path, 'Municipios-V4250.xls')) as f:
                 df_ = pd.read_excel(f, dtype='string')
             external_vars['V4250'] = {key.strip(): value.strip() for key, value
                                       in df_.dropna().itertuples(False, None)}
 
-            #V4276
+            #V4276 = Municípios e países estrangeiros
             with zf.open(os.path.join(path, 'Municipios e Pais Estrangeiro - V4276.xls')) as f:
                 df_ = pd.read_excel(f, dtype='string')
             external_vars['V4276'] = {key.strip(): value.strip() for key, value
                                       in df_.dropna().itertuples(False, None)}
 
-            #V4279
+            #V4279 = Países estrangeiros
             with zf.open(os.path.join(path, 'Estrutura ONU V4279.xls')) as f:
                 df_ = pd.read_excel(f, dtype='string', skiprows=3, na_values=[' '])
             external_vars['V4279'] = {key.strip(): value.strip() for value, key
                                       in df_.dropna(subset='CODIGO').itertuples(False, None)}
 
-            #V4239
+            #V4239 = Países estrangeiros
             with zf.open(os.path.join(path, 'Estrutura ONU V4239.xls')) as f:
                 df_ = pd.read_excel(f, dtype='string', skiprows=3, na_values=[' '])
             external_vars['V4239'] = {key.strip(): value.strip() for value, key
                                       in df_.dropna(subset='CODIGO').itertuples(False, None)}
 
-            #V4219 e V4269
+            #V4219 e V4269 = Países estrangeiros e UFs
             with zf.open(os.path.join(path, 'Estrutura ONU V4219, V4269.xls')) as f:
                 df_ = pd.read_excel(f, dtype='string', skiprows=3, na_values=[' '])
             var_ext_tmp = {key.strip(): value.strip() for value, key
@@ -363,14 +387,14 @@ class handleCensoDemografico(handleDatabase):
             external_vars['V4219'] = var_ext_tmp 
             external_vars['V4269'] = var_ext_tmp 
 
-            #V4230
+            #V4230 = Países estrangeiros e UFs
             with zf.open(os.path.join(path, 'Estrutura Migracao V4230.xls')) as f:
                 df_ = pd.read_excel(f, dtype='string', skiprows=2, na_values=[' '])
             external_vars['V4230'] = {key.strip(): value.strip() for key, value
                                       in df_.dropna(subset='CODIGOS').itertuples(False, None)
                                       if key.isdigit()}
 
-            #V4210 e V4260
+            #V4210 e V4260 = Países estrangeiros e UFs
             with zf.open(os.path.join(path, 'Estrutura Migracao V4210, V4260.xls')) as f:
                 df_ = pd.read_excel(f, dtype='string', skiprows=2, na_values=[' '])
             var_ext_tmp = {key.strip(): value.strip() for key, value
@@ -379,30 +403,226 @@ class handleCensoDemografico(handleDatabase):
             external_vars['V4210'] = var_ext_tmp
             external_vars['V4260'] = var_ext_tmp
 
-            #V4355 e area_de_conhecimento
-            with zf.open(os.path.join(path, 'Cursos Superiores - Estrutura V4535.xls')) as f: #Houve algum erro de digitação, pois a variável correta é V4355, apesar de o arquivo se referir à variável V4535, a documentação também se refere ao documento com o mesmo nome que ele se encontra.
+            #V4355 = Cursos Superiores; e area_de_conhecimento
+            with zf.open(os.path.join(path, 'Cursos Superiores - Estrutura V4535.xls')) as f: #Houve algum erro de digitação, pois a variável correta é V4355, apesar de o arquivo se referir à variável V4535, a documentação também se refere ao documento com o nome da variável errado.
                 df_ = pd.read_excel(f, dtype='string', skiprows=5, na_values=[' '])
             external_vars['V4355'] = {key.strip(): value.strip() for key, value
                                       in df_.iloc[:, 1:].dropna(subset='Código').itertuples(False, None)
                                       if key.isdigit()}
             external_vars['V4355']['02'] = 'Não Superior'
-            external_vars['area_de_conhecimento'] = {}
+            external_vars['cursos_superiores_area_de_conhecimento'] = {}
             areas = []
             new_area = None
-            for e in df_.iloc[:, 0].dropna():
-                if e[0].isdigit():
+            for line in df_.iloc[:, 0].dropna():
+                if line[0].isdigit():
                     if new_area is not None:
                         areas.append(new_area.strip())
-                    new_area = e
+                    new_area = line
                 else:
-                    new_area += e
+                    new_area += line
             areas.append(new_area)
-            for e in areas:
-                key, value = e.split('-')
+            for area in areas:
+                key, value = area.split('-')
                 for k in re.findall(r'\d', key):
-                    external_vars['area_de_conhecimento'][k] = value.strip()
+                    external_vars['cursos_superiores_area_de_conhecimento'][k] = value.strip()
 
-        print(external_vars['area_de_conhecimento'])
+            #V4354 = Cursos Superiores; areas_especificas e areas_gerais
+            with zf.open(os.path.join(path, 'Cursos Superiores - Estrutura V4534.xls')) as f: #Mesmo caso do erro da V4355
+                df_ = pd.read_excel(f, dtype='string', skiprows=4, na_values=[' '])
+            external_vars['V4354'] = {}
+            external_vars['cursos_superiores_areas_especificas'] = {}
+            external_vars['cursos_superiores_areas_gerais'] = {}
+            for line in df_.iloc[:, 2].dropna():
+                key, value = line.split(maxsplit=1)
+                external_vars['V4354'][key.strip()] = value.strip()
+            for line in df_.iloc[:, 1].dropna():
+                key, value = line.split(maxsplit=1)
+                external_vars['cursos_superiores_areas_especificas'][key.strip()] = value.strip()
+            for line in df_.iloc[:, 0].dropna():
+                key, value = line.split(maxsplit=1)
+                external_vars['cursos_superiores_areas_gerais'][key.strip()] = value.strip()
+
+            #V1004 = Região Metropolitana
+            external_vars['V1004'] = {}
+            with zf.open(os.path.join(path, 'V1004.txt')) as f:
+                for line in f.readlines():
+                    line = line.decode('windows-1252')
+                    if line[0].isdigit():
+                        key, value = line.split('-', 1)
+                        external_vars['V1004'][key.strip()] = value.strip()
+
+            #V4451 = Código antigo da ocupação, relativo a 91
+            with zf.open(os.path.join(path, 'Ocupacao91-Estrutura.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', skiprows=2, header=None, names=['key', 'value'], na_values=[' '])
+            external_vars['V4451'] = {key.strip(): value.strip() for key, value
+                                      in df_.dropna(subset='key').itertuples(False, None)
+                                      if key.isdigit()}
+            external_vars['V4451']['927'] = 'OUTRAS OCUPACOES OU OCUPACOES MAL DEFINIDAS'
+            external_vars['V4451']['000'] = 'OUTRAS OCUPACOES OU OCUPACOES MAL DEFINIDAS'
+
+            df_.loc[df_['key'].notna(), 'value'] = pd.NA
+            df_['value'] = df_['value'].ffill()
+            external_vars['ocupacao_91_gg'] = {key.strip(): value.strip() for key, value
+                                               in df_.dropna(subset='key').itertuples(False, None)
+                                               if key.isdigit()}
+            external_vars['ocupacao_91_gg']['927'] = 'OUTRAS OCUPACOES OU OCUPACOES MAL DEFINIDAS'
+            external_vars['ocupacao_91_gg']['000'] = 'OUTRAS OCUPACOES OU OCUPACOES MAL DEFINIDAS'
+            external_vars['ocupacao_91_gg']['999'] = 'OUTRAS OCUPACOES OU OCUPACOES MAL DEFINIDAS'
+
+
+            #V4452 = Código novo da ocupação, relativo a 2000
+            wordDoc = self.doc2docx(zf, path, 'Ocupacao-Estrutura.doc')
+            rows_ = []
+            for i, table in enumerate(wordDoc.tables):
+                for row in table.rows:
+                    row_ = []
+                    for j, cell in enumerate(row.cells):
+                        if i >= 1 and j == 0 and cell.text.startswith(('C', 'G')):
+                            break
+                        row_.append(cell.text)
+                    if row_:
+                        rows_.append(row_)
+            df_ = pd.DataFrame(rows_[2:], columns=rows_[1])
+            external_vars['V4452'] = {key.strip(): value.strip() for key, value
+                                      in df_[['Grupo de base', 'Titulação']]
+                                            .dropna(subset='Grupo de base')
+                                            .itertuples(False, None)
+                                      if key.isdigit()}
+            external_vars['ocupacao_2000_sg'] = {key.strip()[:3]: value.strip() for key, value
+                                      in df_[['Subgrupo', 'Titulação']]
+                                            .dropna(subset='Subgrupo')
+                                            .itertuples(False, None)
+                                      if key.isdigit()}
+            external_vars['ocupacao_2000_sgp'] = {key.strip()[:2]: value.strip() for key, value
+                                      in df_[['Subgrupo principal', 'Titulação']]
+                                            .dropna(subset='Subgrupo principal')
+                                            .itertuples(False, None)
+                                      if key.isdigit()}
+            external_vars['ocupacao_2000_gg'] = {key.strip()[:1]: value.strip() for key, value
+                                      in df_[['Grande Grupo', 'Titulação']]
+                                            .dropna(subset='Grande Grupo')
+                                            .itertuples(False, None)
+                                      if key.isdigit()}
+            external_vars['V4452']['0000'] = 'OCUPAÇÕES MAL ESPECIFICADAS'
+            external_vars['ocupacao_2000_sg']['000'] = 'OCUPAÇÕES MAL ESPECIFICADAS' 
+            external_vars['ocupacao_2000_sgp']['00'] = 'OCUPAÇÕES MAL ESPECIFICADAS'
+            external_vars['ocupacao_2000_gg']['0'] = 'OCUPAÇÕES MAL ESPECIFICADAS' 
+
+            #V4090 = Estrutura de Religião e grandes grupos de religião
+            wordDoc = self.doc2docx(zf, path, 'Estrutura de Religiao - V4090.doc')
+            rows_ = []
+            for table in wordDoc.tables:
+                for row in table.rows:
+                    row_ = []
+                    for j, cell in enumerate(row.cells):
+                        if (j == 0 and cell.text.startswith('R')) or j >= 2 or cell.text == '':
+                            break
+                        row_.append(cell.text)
+                    if row_:
+                        rows_.append(row_)
+            df_ = pd.DataFrame(rows_, columns=['key', 'value'])
+            external_vars['V4090'] = {key.strip(): value.strip() for key, value
+                                      in df_.itertuples(False, None)
+                                      if key.isdigit()}
+            external_vars['religiao_gg'] = {line.split(maxsplit=1)[0].strip(): line.split(maxsplit=1)[1].strip() for line
+                                            in df_['key'] if not line.isdigit()}
+            external_vars['religiao_gg']['00'] = 'SEM RELIGIÂO'
+            external_vars['religiao_gg']['99'] = 'SEM DECLARAÇÃO'
+
+            #V4461 = Código antigo da atividade de trabalho relativo a 91
+            with zf.open(os.path.join(path, 'Atividade91-Estrutura.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', header=None, names=['key', 'value'], na_values=[' '])
+            external_vars['V4461'] = {key.strip(): value.strip() for key, value
+                                      in df_.dropna(subset='key').itertuples(False, None)
+                                      if key.isdigit()}
+
+            df_.loc[df_['key'].notna(), 'value'] = pd.NA
+            df_['value'] = df_['value'].ffill()
+            external_vars['atividade_91_gg'] = {key.strip(): value.strip() for key, value
+                                                in df_.dropna(subset='key').itertuples(False, None)
+                                                if key.isdigit()}
+
+            #V4462 = Código novo da atividade
+            with zf.open(os.path.join(path, 'CnaeDom-Estrutura.xls')) as f:
+                df_ = pd.read_excel(f, dtype='string', skiprows=2, header=None, names=['key', 'value'], na_values=[' '])
+            external_vars['V4462'] = {key.strip(): value.strip() for key, value
+                                      in df_.dropna(subset='key').itertuples(False, None)
+                                      if re.match(r'\d{5}', key)}
+            external_vars['atividade-sgp'] = {key.strip(): value.strip() for key, value
+                                              in df_.dropna(subset='key').itertuples(False, None)
+                                              if re.match(r'\b\d{2}\b', key)}
+            df_.loc[df_['key'].notna(), 'value'] = pd.NA
+            df_['value'] = df_['value'].ffill()
+            external_vars['atividade-gg'] = {key.strip(): value.split('-', 1)[-1].strip() for key, value
+                                             in df_.dropna(subset='key').itertuples(False, None)
+                                             if re.match(r'\d{5}', key)}
+
+            #Divisão territorial brasileira
+            with zf.open(os.path.join(path, 'Divisao Territorial Brasileira.xls')) as f:
+                dfs_ = pd.read_excel(f, dtype='string', skiprows=1, header=None, names=['key', 'value'], na_values=[' '], 
+                                     sheet_name=['Mesorregião', 'Microrregião', 'Município', 'Distrito', 'Subdistrito'])
+
+            #V1002 = Mesorregião; V1003 = Microrregião; V0103 e V1103 = Municipio; V0104 = Distrito; V0105 = Subdistrito
+            vars_ = {'V1002': 'Mesorregião',
+                     'V1003': 'Microrregião',
+                     'V0103': 'Município',
+                     'V1103': 'Município',
+                     'V0104': 'Distrito', 
+                     'V0105': 'Subdistrito'}
+            for k, v in vars_.items():
+                external_vars[k] = {key.strip(): value.strip() for key, value
+                                    in dfs_[v].dropna(subset='key').itertuples(False, None)
+                                    if key.isdigit()}
+
+            wordDoc = self.doc2docx(zf, 'Documentacao', 'Documentação.doc')
+            rows_ = []
+            for table in wordDoc.tables:
+                for row in table.rows:
+                    row_ = []
+                    for j, cell in enumerate(row.cells):
+                        if (j == 0 and (cell.text.startswith('VA') or not cell.text.startswith(('V', 'M')))) or j >= 2:
+                            break
+                        if j == 0:
+                            row_.append(cell.text)
+                        else:
+                            var_dict = {}
+                            for i, e in enumerate(cell.text.split('\n')):
+                                if i == 0:
+                                    row_.append(e)
+                                elif e[0].isdigit() and e.find('-') != -1:
+                                    k, v = e.split('-', 1)
+                                    var_dict[k.strip()] = v.strip()
+                            row_.append(var_dict)
+                    if row_:
+                        rows_.append(row_)
+            df = pd.DataFrame(rows_, columns=['COD_VAR', 'NOME_VAR', 'MAP_VAR'])
+
+        #Ajustes manuais
+        df.loc[df.COD_VAR == 'V0104', 'NOME_VAR'] = 'CÓDIGO DO DISTRITO'
+        df.loc[df.COD_VAR == 'V0300', 'NOME_VAR'] = 'IDENTIFICAÇÃO DO DOMICÍLIO'
+        df.loc[df.COD_VAR == 'V0400', 'NOME_VAR'] = 'NÚMERO DE ORDEM DA PESSOA RECENSEADA'
+
+        df = df.drop_duplicates(subset=['COD_VAR', 'NOME_VAR'])
+
+        extra_vars = []
+        for k, v in external_vars.items():
+            filter_ = df.COD_VAR == k
+            if filter_.sum():
+                df.loc[df.COD_VAR == k, 'MAP_VAR'] = [v] #Hack(?) para o pandas aceitar um elemento de tipo dicionário
+            else:
+                extra_vars.append([k, k, v])
+
+        df_extra = pd.DataFrame(extra_vars, columns=['COD_VAR', 'NOME_VAR', 'MAP_VAR'])
+        df = pd.concat([df, df_extra], ignore_index=True)
+        
+        df.to_excel(f'{self.path_dict}.xlsx', index=False)
+        df.to_pickle(f'{self.path_dict}.pickle')
+
+        #TODO indicar nas variáveis extras o quanto se deve fazer slice (self.df[var].str.slice(stop=x).astype('category')
+        #TODO indicar também naquelas em que não é possível realizar o slice e aplicar o map antes do agrupamento na função crosstable
+
+        return df
+
 
     def make_map_dict_2010(self):
         path = 'Documentação/Anexos Auxiliares'
@@ -608,3 +828,58 @@ class handleCensoDemografico(handleDatabase):
                                 + self.df.V1003.astype('string')).astype('category')
             return self.df
 
+#As funções de harmonização das informações educacionais são uma conversão dos scripts
+# em R elaborados por @antrologos, disponível em https://github.com/antrologos/VariaveisHarmonizadasDataCEM/
+def educacao_1960(df):
+    '''
+    V212 - Última série concluída
+    =============================
+    4    Primeira Série
+    5    Segunda Série
+    6    Terceira Série
+    7    Quarta Série
+    8    Quinta Série
+    9    Sexta Série
+    0    Esta cursando o Primeiro ano do Elementar (não possui série concluída)
+    1    Nunca Frequentou Escola
+    2    Ignorado
+         Não aplicável (4 anos de idade ou menos) ou Informação Faltante (Registro Corrompido)
+    V213 - Grau do Curso
+    ====================
+    2    Elementar
+    3    Médio Primeiro Ciclo
+    4    Médio Segundo Ciclo
+    5    Superior
+    6    Ignorado
+    1    Nunca Frequentou Escola
+    0    Esta cursando o Primeiro ano do Elementar (não possui série concluída)
+         Não aplicável (4 anos de idade ou menos) ou Informação Faltante (Registro Corrompido)
+    '''
+    
+    #Anos base de estudo para cada grau
+    yearsStage = {
+        '2': 0,
+        '3': 4,
+        '4': 8,
+        '5': 11
+    }
+    #Anos de estuda para as séries
+    yearsSeries = {
+        '4': 1,
+        '5': 2,
+        '6': 3,
+        '7': 4,
+        '8': 5,
+        '9': 6
+    }
+    df['anosEsc'] = df.V212.map(yearStage) + df.V213.map(yearSeries)
+    #Aplicar teto para os graus de escolaridade
+    #Elementar: 4 anos; Médio 1º Ciclo: 8; Médio 2º Ciclo: 11; Superior: 15
+    max_elementar = 4
+    max_medio_1   = 8
+    max_medio_2   = 11
+    max_superior  = 15
+    df.loc[(df.anosEsc > max_elementar) & (v213 == '2'), 'anosEsc'] = max_elementar
+    df.loc[(df.anosEsc > max_medio_1) & (v213 == '3'), 'anosEsc'] = max_medio_1
+    df.loc[(df.anosEsc > max_medio_2) & (v213 == '4'), 'anosEsc'] = max_medio_2
+    df.loc[(df.anosEsc > max_superior) & (v213 == '5'), 'anosEsc'] = max_superior
