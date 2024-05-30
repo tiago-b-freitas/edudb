@@ -223,7 +223,7 @@ class handleDatabase:
         pass
 
     def wraper_preprocess_df(self, func):
-        print_info('Preprocessamendo dataframe...')
+        print_info('Preprocessamento dataframe...')
         func()
         print_info('Preprocessamento concluído!')
 
