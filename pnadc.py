@@ -13,7 +13,7 @@ URL = 'http://ftp.ibge.gov.br/Trabalho_e_Rendimento/Pesquisa_Nacional_por_Amostr
 EXPR_FILTER = ('[self.url+"/"+a["href"] for a in soup.find_all("a")'
                 'if str(self.trimester).zfill(2)+str(self.year) in a["href"]]')
 FIRST_YEAR = 2012
-LAST_YEAR = 2023
+LAST_YEAR = 2024
 FIRST_TRIMESTER = 1 
 LAST_TRIMESTER = 4
 WEIGHTS = 'V1028'

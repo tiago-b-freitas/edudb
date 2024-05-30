@@ -73,6 +73,14 @@ UF_COD_NOME = {
 
 UF_NOME_COD = {value: key for key, value in UF_COD_NOME.items()}
 
+REGIOES = {
+    'Norte',
+    'Nordeste',
+    'Sudeste',
+    'Sul',
+    'Centro-Oeste'
+}
+
 MAP_BRASIL_REGIOES_UFS = {key: 'ufs' for key in UF_NOME_COD.keys()}
 
 MAP_BRASIL_REGIOES_UFS.update({

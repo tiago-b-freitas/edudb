@@ -4,6 +4,7 @@
 from .censoDemografico import handleCensoDemografico
 from .pnadc import handlePNADc
 from .saeb import handleSaeb
+from .ideb import handleIdeb
 from .definitions import UF_SIGLA_NOME
 
 
@@ -23,5 +24,6 @@ __all__ = (
     'handleCensoEscolar',
     'handlePNADc',
     'hangleSaeb',
+    'handleIdeb',
     'UF_SIGLA_NOME'
 )
