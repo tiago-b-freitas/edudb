@@ -73,7 +73,6 @@ class handlePNADc(handleDatabase):
             with zf.open(filename) as f:
                 print_info('Descompressão concluída!')
                 print_info('Carregando DataFrame...')
-                print(self.df_dict)
                 self.df = pd.read_fwf(f,
                                  names=self.df_dict.key,
                                  colspecs=self.colspecs,
