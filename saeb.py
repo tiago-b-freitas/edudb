@@ -27,6 +27,7 @@ COLUMNS_LABELS_HEADER = {
     'uf': {2011: ['ANO_SAEB', 'CO_UF', 'NO_UF'],
            2015: ['CO_UF', 'NO_UF'],},
 }
+
 COLUMNS_LABELS_BODY = {
     2011: [
         'DEPENDENCIA_ADM', 'LOCALIZACAO', 'CAPITAL',

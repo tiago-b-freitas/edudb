@@ -30,21 +30,21 @@ COLUMNS_LABELS_HEADER = {
 }
 
 COLUMNS_LABELS_APROVACAO = {
-    'EF_AI': ['taxa_aprovacao_EF_AI', 'taxa_aprovacao_EF_1', 'taxa_aprovacao_EF_2',
-              'taxa_aprovacao_EF_3',  'taxa_aprovacao_EF_4', 'taxa_aprovacao_EF_5',
+    'EF_AI': ['TAXA_APROVACAO_EF_AI', 'TAXA_APROVACAO_EF_1', 'TAXA_APROVACAO_EF_2',
+              'TAXA_APROVACAO_EF_3',  'TAXA_APROVACAO_EF_4', 'TAXA_APROVACAO_EF_5',
               'P_EF_AI'],
 
-    'EF_AF': ['taxa_aprovacao_EF_AF', 'taxa_aprovacao_EF_6', 'taxa_aprovacao_EF_7',  
-              'taxa_aprovacao_EF_8',  'taxa_aprovacao_EF_9', 'P_EF_AF'],
+    'EF_AF': ['TAXA_APROVACAO_EF_AF', 'TAXA_APROVACAO_EF_6', 'TAXA_APROVACAO_EF_7',  
+              'TAXA_APROVACAO_EF_8',  'TAXA_APROVACAO_EF_9', 'P_EF_AF'],
 
-    'EM':    ['taxa_aprovacao_EM',    'taxa_aprovacao_EM_1', 'taxa_aprovacao_EM_2',  
-              'taxa_aprovacao_EM_3',  'taxa_aprovacao_EM_4', 'P_EM'],
+    'EM':    ['TAXA_APROVACAO_EM',    'TAXA_APROVACAO_EM_1', 'TAXA_APROVACAO_EM_2',  
+              'TAXA_APROVACAO_EM_3',  'TAXA_APROVACAO_EM_4', 'P_EM'],
 }
 
 COLUMNS_LABELS_SAEB = {
-    'EF_AI': ['MEDIA_EF_AI_MT',  'MEDIA_EF_AI',  'N_EF_AI'],
-    'EF_AF': ['MEDIA_EF_AF_MT',  'MEDIA_EF_AF',  'N_EF_AF'],
-    'EM':    ['MEDIA_EM_MT',     'MEDIA_EM_LP',  'N_EM'],
+    'EF_AI': ['MEDIA_MT_EF_AI',  'MEDIA_LP_EF_AI',  'N_EF_AI'],
+    'EF_AF': ['MEDIA_MT_EF_AF',  'MEDIA_LP_EF_AF',  'N_EF_AF'],
+    'EM':    ['MEDIA_MT_EM'   ,  'MEDIA_LP_EM'   ,  'N_EM'],
 }
 
 COLUMNS_LABELS_TAIL = {
