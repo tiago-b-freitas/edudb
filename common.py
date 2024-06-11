@@ -341,16 +341,24 @@ class handleDatabase:
             else:
                 table = df.groupby(vars_g, observed=False)[self.weight_var].sum()
         else:
-            match aggfunc:
-                case 'mean':
-                    aggfunc = mean_weight
-                case 'median':
-                    aggfunc = median_weight
-                case 'std':
-                    aggfunc = std_weight
-            table = (df.groupby(vars_g, observed=False)[[values, self.weight_var]]
-                            .apply(lambda g:
-                                aggfunc(g, threshold)))
+            g = df.groupby(vars_g, observed=False)
+            if self.weight_var is not None:
+                match aggfunc:
+                    case 'mean':
+                        aggfunc = mean_weight
+                    case 'median':
+                        aggfunc = median_weight
+                    case 'std':
+                        aggfunc = std_weight
+                table = g[[values, self.weight_var]].apply(lambda g:aggfunc(g, threshold))
+            else:
+                match aggfunc:
+                    case 'mean':
+                        table = g[values].mean()
+                    case 'median':
+                        table = g[values].median()
+                    case 'std':
+                        table = g[values].std()
         
         index_mapper = [self.get_map_var(v) for v in index_vars]
         columns_mapper = [self.get_map_var(v) for v in columns_vars if v is not None]
