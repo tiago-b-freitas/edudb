@@ -9,6 +9,7 @@ import zipfile
 
 import docx
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 import pyreadstat
 import py7zr
 import requests
@@ -87,6 +88,12 @@ class handleCensoDemografico(handleDatabase):
             print_error(f'UF {uf} não implementada. As opções válidas são'
                         f'{UF_SIGLA_NOME.keys()} e "all"')
             raise ValueError
+        if year <= 1991 and uf.upper() != 'ALL':
+            print_error('Só estão disponíveis arquivos do Censo Demográfico '
+                        'de 1960 e 1991 de todo o Brasil. Por favor, utilize '
+                        'a opção "ALL"')
+            raise ValueError
+
         if type_db not in TYPES:
             print_error(f'Tipo {type_db} não existente. As opções válidas são'
                         f'{TYPES.keys()}')
@@ -246,15 +253,16 @@ class handleCensoDemografico(handleDatabase):
         if self.year == 1980:
             self.df.drop(columns=['D_R'], inplace=True) #coluna vazia
 
-        for col in self.df.columns:
+        for col in self.meta.variable_value_labels.keys():
+            self.df[col] = self.df[col].astype('string')
+            self.df[col] = self.df[col].astype('category')
+
+        for col in self.df.select_dtypes(exclude='category').column:
             dtype = self.get_min_int_dtype()
             try:
                 self.df[col] = self.df[col].abs().astype(dtype)
             except TypeError:
                 self.df[col] = self.df[col].abs().astype('Float64')
-        for col in self.meta.variable_value_labels.keys():
-            self.df[col] = self.df[col].astype('string')
-            self.df[col] = self.df[col].astype('category')
 
 
     def preprocess_df_2000e2010(self):
@@ -303,7 +311,8 @@ class handleCensoDemografico(handleDatabase):
             with zf.open(os.path.join(path, filename)) as f:
                 with open(tmp_filepath0, 'wb') as f_tmp:
                     f_tmp.write(f.read())
-            subprocess.run(['lowriter', '--convert-to', 'docx', tmp_filepath0, '--outdir', self.raw_files_path])
+            subprocess.run(['lowriter', '--convert-to', 'docx', tmp_filepath0,
+                            '--outdir', self.raw_files_path])
             wordDoc = docx.Document(tmp_filepath1)
             os.remove(tmp_filepath0)
             os.remove(tmp_filepath1)
@@ -348,6 +357,31 @@ class handleCensoDemografico(handleDatabase):
             map_var_dict['V036'] = {'0': 'Sem declaração',
                                     '1': 'Sim',
                                     '2': 'Não'}
+        elif self.year == 1980:
+            #Algumas variáveis não estão codificadas no arquivo .sav
+            map_var_dict['V517'] = {'0': 'menos de 1 ano',
+                                    '1': '1 ano',
+                                    '2': '2 anos',
+                                    '3': '3 anos',
+                                    '4': '4 anos',
+                                    '5': '5 anos',
+                                    '6': '6 a 9 anos',
+                                    '7': '7 a 10 anos',
+                                    '8': 'nasceu',
+                                    '9': 'sem declaração'},
+
+            map_var_dict['V521'] = {'0': 'nenhuma',
+                                    '1': 'primário',
+                                    '2': 'ginasial médio',
+                                    '3': '1º grau',
+                                    '4': '2º grau',
+                                    '5': 'colegial médio',
+                                    '6': 'supletivo 1º grau',
+                                    '7': 'supletivo 2º grau',
+                                    '8': 'superior',
+                                    '9': 'sem declaração'}
+            #TODO há outras
+
 
         df = pd.DataFrame({'COD_VAR': [key for key in self.meta.column_names],
                            'NOME_VAR': [self.meta.column_names_to_labels.get(key, pd.NA) 
@@ -787,6 +821,7 @@ class handleCensoDemografico(handleDatabase):
     def get_df(self, filetype='parquet', **kwargs):
         if filetype not in SUPPORTED_FTs:
             raise ValueError
+
         if self.uf == 'ALL' and self.year >= 2000:
             self.dir_path = os.path.join(self.path, FILETYPES_PATH[filetype])
             if not os.path.isdir(self.dir_path):
@@ -798,45 +833,48 @@ class handleCensoDemografico(handleDatabase):
                 print_info(f'Arquivo {self.dest_filepath} já existente')
                 read_fun = getattr(pd, f'read_{filetype}')
                 self.df = read_fun(self.dest_filepath, **kwargs)
-                return self.df
-            all_ufs = [f for f in glob.glob(f'{self.dir_path}/*.{filetype}')
-                          if 'ALL' not in f]
-            is_complete = True
-            for uf in UF_SIGLA_NOME:
-                has_processed = False
+
+            else:
+                all_ufs = [f for f in glob.glob(f'{self.dir_path}/*.{filetype}')
+                              if 'ALL' not in f]
+                is_complete = True
+                for uf in UF_SIGLA_NOME:
+                    has_processed = False
+                    for f in all_ufs:
+                        if uf in f:
+                            has_processed = True
+                    if not has_processed:
+                        print_error(f'A uf {uf} não foi ainda processada')
+                        is_complete = False
+                if not is_complete:
+                    print_error('É preciso processar todas as ufs antes de juntá-las todas')
+                    raise ValueError
+                print_info('Todas as ufs já foram processadas, preparando para juntá-las')
+                self.df = pd.DataFrame()
                 for f in all_ufs:
-                    if uf in f:
-                        has_processed = True
-                if not has_processed:
-                    print_error(f'A uf {uf} não foi ainda processada')
-                    is_complete = False
-            if not is_complete:
-                print_error('É preciso processar todas as ufs antes de juntá-las todas')
-                raise ValueError
-            print_info('Todas as ufs já foram processadas, preparando para juntá-las')
-            self.df = pd.DataFrame()
-            for f in all_ufs:
-                print_info(f'Anexando o arquivo {f} no DataFrame')
-                df_tmp = pd.read_parquet(f)
-                self.df = pd.concat([self.df, df_tmp], ignore_index=True)
+                    print_info(f'Anexando o arquivo {f} no DataFrame')
+                    df_tmp = pd.read_parquet(f)
+                    self.df = pd.concat([self.df, df_tmp], ignore_index=True)
 
-            for col in self.df.select_dtypes(object).columns:
-                if self.year in (2000, 2010) and col == 'V0300':
-                    continue
-                self.df[col] = self.df[col].astype('category')
+                for col in self.df.select_dtypes(object).columns:
+                    if col == 'V0300':
+                        continue
+                    self.df[col] = self.df[col].astype('category')
 
-            self.save(filetype=self.filetype)
-            return self.df
+                self.save(filetype=self.filetype)
+
         else:
             self.df = super().get_df(filetype, **kwargs)
-            if self.year == 2010:
-                self.cod_mun = (self.df.V0001.astype('string')
-                                + self.df.V0002.astype('string')).astype('category')
-                self.cod_meso = (self.df.V0001.astype('string')
-                                + self.df.V1002.astype('string')).astype('category')
-                self.cod_micro = (self.df.V0001.astype('string')
-                                + self.df.V1003.astype('string')).astype('category')
-            return self.df
+
+        if self.year == 2010:
+            self.cod_mun = (self.df.V0001.astype('string')
+                            + self.df.V0002.astype('string')).astype('category')
+            self.cod_meso = (self.df.V0001.astype('string')
+                            + self.df.V1002.astype('string')).astype('category')
+            self.cod_micro = (self.df.V0001.astype('string')
+                            + self.df.V1003.astype('string')).astype('category')
+        self.educ()
+        return self.df
 
     def educ(self):
         match self.year:
@@ -844,11 +882,15 @@ class handleCensoDemografico(handleDatabase):
                 educacao_1960(self.df)
             case 1970:
                 educacao_1970(self.df)
+            case 1980:
+                educacao_1980(self.df)
             case other:
                 #TODO
                 print_error('Ainda não implementado')
 
+
 NAO_FREQUENTA = 'Não frequenta'
+NAO_CONCLUIU_SEM_DECLARACAO = 'Não concluiu e sem declaração de alfabetização'
 NAO_CONCLUIU_ANALF = 'Não concluiu e não alfabetizado'
 NAO_CONCLUIU_ALFA = 'Não concluiu e alfabetizado'
 EF_AI = 'Ensino Fundamental - Anos Iniciais'
@@ -856,6 +898,54 @@ EF_AF = 'Ensino Fundamental - Anos Finais'
 EM = 'Ensino Médio'
 ES = 'Educação Superior'
 
+E_GRADES = [
+    NAO_CONCLUIU_SEM_DECLARACAO,
+    NAO_CONCLUIU_ANALF,
+    NAO_CONCLUIU_ALFA,
+    EF_AI,
+    EF_AF,
+    EM,
+    ES,
+]
+
+EF_1 = 'Ensino Fundamental - 1ª Série'
+EF_2 = 'Ensino Fundamental - 2ª Série'
+EF_3 = 'Ensino Fundamental - 3ª Série'
+EF_4 = 'Ensino Fundamental - 4ª Série'
+EF_5 = 'Ensino Fundamental - 5ª Série'
+EF_6 = 'Ensino Fundamental - 6ª Série'
+EF_7 = 'Ensino Fundamental - 7ª Série'
+EF_8 = 'Ensino Fundamental - 8ª Série'
+EM_1 = 'Ensino Médio - 1ª Série'  
+EM_2 = 'Ensino Médio - 2ª Série'
+EM_3 = 'Ensino Médio - 3ª Série'
+ES_1 = 'Ensino Superior - 1º Ano'
+ES_2 = 'Ensino Superior - 2º Ano'
+ES_3 = 'Ensino Superior - 3º Ano'
+ES_4 = 'Ensino Superior - 4º Ano'
+ES_5 = 'Ensino Superior - 5º Ano'
+ES_6 = 'Ensino Superior - 6º Ano'
+PE   = 'Pré-escolar'
+AA   = 'Alfabetização para adultos'
+S1   = 'Supletivo 1º Grau'
+S2   = 'Supletivo 2º Grau'
+V    = 'Vestibular'
+PG   = 'Pós-graduação'
+
+F_GRADES = [
+    PE, AA,
+    EF_1, EF_2, EF_3, EF_4,
+    EF_5, EF_6, EF_7, EF_8,
+    S1,
+    EM_1, EM_2, EM_3,
+    S2, V,
+    ES_1, ES_2, ES_3,
+    ES_4, ES_5, ES_6,
+    PG,
+]
+
+CAT_E_TYPES = CategoricalDtype(categories=E_GRADES, ordered=True)
+CAT_F_TYPES = CategoricalDtype(categories=F_GRADES, ordered=True)
 
 MAX_EF_AI = 4
 MAX_EF_AF = 8
@@ -864,10 +954,11 @@ MAX_ES    = 15
 
 C_ANOS_ESC   = 'anos_esc'
 C_ETAPA_CONC = 'etapa_concluida'
-
+C_FREQ = 'etapa_frequentada'
 
 #As funções de harmonização das informações educacionais são, em parte, uma conversão dos scripts
 # em R elaborados por @antrologos, disponível em https://github.com/antrologos/VariaveisHarmonizadasDataCEM/
+# e https://github.com/antrologos/harmonizeIBGE/
 def educacao_1960(df):
     '''
     V211 - Alfabetização
@@ -960,7 +1051,6 @@ def educacao_1960(df):
     89   Curso com grau não especificado
     99   Ignorado 
          Não aplicável (9 anos de idade ou menos) ou Informação Faltante (Registro Corrompido)
-
     '''
     
     #Anos base de estudo para cada grau
@@ -982,20 +1072,19 @@ def educacao_1960(df):
     
     #Coluna de anos de escolaridade
     df[C_ANOS_ESC] = df.V213.map(yearsStage) + df.V212.map(yearsSeries)
-    df.loc[df.V213.isin({'0', '1'}), 'C_ANOS_ESC'] = 0
+    df.loc[df.V213.isin({'0', '1'}), C_ANOS_ESC] = 0
     #Aplicar teto para os graus de escolaridade
     #Elementar: 4 anos; Médio 1º Ciclo: 8; Médio 2º Ciclo: 11; Superior: 15
     df.loc[(df[C_ANOS_ESC] > MAX_EF_AI) & (df.V213 == '2'), C_ANOS_ESC] = MAX_EF_AI
     df.loc[(df[C_ANOS_ESC] > MAX_EF_AF) & (df.V213 == '3'), C_ANOS_ESC] = MAX_EF_AF
     df.loc[(df[C_ANOS_ESC] > MAX_EM)    & (df.V213 == '4'), C_ANOS_ESC] = MAX_EM
     df.loc[(df[C_ANOS_ESC] > MAX_ES)    & (df.V213 == '5'), C_ANOS_ESC] = MAX_ES
-    df[C_ANOS_ESC] = df[C_ANOS_ESC].fillna(0)
     df[C_ANOS_ESC] = df[C_ANOS_ESC].astype('UInt8')
 
     #Coluna de conclusão de etapa
 
     #Preparar algumas variáveis
-    V214i = df.V214.astype(int)
+    V214i = df.V214.astype('UInt16')
     filter_no_grade = (V214i == 0) | (df.V212 == '1') | (df.V213 == '1')
     df[C_ETAPA_CONC] = pd.NA
 
@@ -1005,7 +1094,7 @@ def educacao_1960(df):
     df.loc[V214i.between(20, 29), C_ETAPA_CONC] = EF_AF
     df.loc[V214i.between(30, 49), C_ETAPA_CONC] = EM
     df.loc[V214i.between(50, 79), C_ETAPA_CONC] = ES
-    df[C_ETAPA_CONC] = df[C_ETAPA_CONC].astype('category')
+    df[C_ETAPA_CONC] = df[C_ETAPA_CONC].astype(CAT_E_TYPES)
 
 def educacao_1970(df):
     '''
@@ -1017,73 +1106,146 @@ def educacao_1970(df):
     --------------------
     Nota: O arquivo .sav disponibilizado pelo CEM não segue os valores
     da documentação, por essa razão, realizei essa compatibilização.
-    
+
+    V036 - Frequenta a escola
+    ========================= 
+    0     Sem declaração
+    1     Sim
+    2     Não
+    -------------------------
+    Nota: ver nota acima
+
+    V037 - Última série que concluiu com aprovação neste curso que frequentou anteriormente
+    ===================================================================================== 
+    1     1ª série do elementar
+    2     1ª série
+    3     2ª série
+    4     3ª série
+    5     4ª série
+    6     5ª ou 6ª série
+    7     Admissão ou vestibular
+    8     Artigo 99
+    9     Alfabetização de adultos
+    0     Nenhuma ou sem declaração
+    ------------------------------------------------------------------------------------- 
+    Nota: O Art. 99 da LDB/1961: "Aos maiores de dezesseis anos será permitida a obtenção
+    de certificados de conclusão do curso ginasial, mediante a prestação de exames de
+    madureza, após estudos realizados sem observância do regime escolar.
+    Parágrafo único. Nas mesmas condições, permitir-se-á a obtenção do certificado de
+    conclusão do curso colegial aos maiores de dezenove anos."
+    (Redação dada pelo Decreto-Lei nº 709, 1969) 
+
+    V038 - Último grau concluído com aprovação
+    ==========================================
+    1     Primário/elementar
+    2     Ginasial/médio 1º ciclo
+    3     Colegial/médio 2º ciclo
+    4     Superior
+    5     Nunca frequentou escola
+    0     Sem declaração
+    ------------------------------------------
+
     V039 - Espécie de curso concluído
     =================================
-    0     sem declaração
-    10    primário
-    11    agrícola elementar
-    12    comercial elementar
-    19    industrial elementar
-    21    militar elementar
-    22    normal elementar
-    27    outros elementar
-    28    emendativo elementar
-    30    ginasial
-    31    agrícola 1º ciclo
-    32    comercial 2º ciclo
-    34    eclesiástico 1º ciclo
-    35    educação física 1º ciclo
-    36    enfermagem 1º ciclo
-    39    industrial 1º ciclo
-    41    militar 1º ciclo
-    42    normal 1º ciclo
-    47    outros 1º ciclo
-    48    emendativo 1º ciclo
-    50    colegial
-    51    agrícola 2º ciclo
-    52    comercial 2º ciclo
-    53    belas artes 2º ciclo
-    54    eclesiástico 2º ciclo
-    55    educação física 2º ciclo
-    56    enfermagem 2º ciclo
-    58    estatística 2º ciclo
-    59    industrial 2º ciclo
-    61    militar 2º ciclo
-    62    normal 2º ciclo
-    65    serviço social 2º ciclo
-    67    outros 2º ciclo
-    70    administração
-    71    agronomia
-    72    arquitetura
-    73    belas artes superior
-    74    ciências sociais
-    75    filosofia
-    76    geografia ou história
-    77    história natural
-    78    letras
-    79    matemática, física e química
-    80    pedagogia
-    81    contabilidade ou atuária
-    82    economia
-    83    direito
-    84    eclesiástico superior
-    85    educação física superior
-    86    enfermagem superior
-    87    engenharia
-    88    estatística superior
-    89    farmácia ou bioquímica
-    90    medicina
-    91    militar superior
-    92    odontologia
-    93    psicologia
-    94    química industrial
-    95    serviço social superior
-    96    veterinária
-    97    outros superiores
-    98    grau indeterminado
-    99    nenhum
+    0     Sem declaração
+    10    Primário
+    11    Agrícola elementar
+    12    Comercial elementar
+    19    Industrial elementar
+    21    Militar elementar
+    22    Normal elementar
+    27    Outros elementar
+    28    Emendativo elementar
+    30    Ginasial
+    31    Agrícola 1º ciclo
+    32    Comercial 2º ciclo
+    34    Eclesiástico 1º ciclo
+    35    Educação física 1º ciclo
+    36    Enfermagem 1º ciclo
+    39    Industrial 1º ciclo
+    41    Militar 1º ciclo
+    42    Normal 1º ciclo
+    47    Outros 1º ciclo
+    48    Emendativo 1º ciclo
+    50    Colegial
+    51    Agrícola 2º ciclo
+    52    Comercial 2º ciclo
+    53    Belas artes 2º ciclo
+    54    Eclesiástico 2º ciclo
+    55    Educação física 2º ciclo
+    56    Enfermagem 2º ciclo
+    58    Estatística 2º ciclo
+    59    Industrial 2º ciclo
+    61    Militar 2º ciclo
+    62    Normal 2º ciclo
+    65    Serviço social 2º ciclo
+    67    Outros 2º ciclo
+    70    Administração
+    71    Agronomia
+    72    Arquitetura
+    73    Belas artes superior
+    74    Ciências sociais
+    75    Filosofia
+    76    Geografia ou história
+    77    História natural
+    78    Letras
+    79    Matemática, física e química
+    80    Pedagogia
+    81    Contabilidade ou atuária
+    82    Economia
+    83    Direito
+    84    Eclesiástico superior
+    85    Educação física superior
+    86    Enfermagem superior
+    87    Engenharia
+    88    Estatística superior
+    89    Farmácia ou bioquímica
+    90    Medicina
+    91    Militar superior
+    92    Odontologia
+    93    Psicologia
+    94    Química industrial
+    95    Serviço social superior
+    96    Veterinária
+    97    Outros superiores
+    98    Grau indeterminado
+    99    Nenhum
+    ---------------------------------
     '''
+
+    #Coluna de anos de escolaridade
+    df[C_ANOS_ESC] = pd.NA
+
+    #Anos base de estudo para cada grau
+    yearsStage = {
+        '1': 0,
+        '2': MAX_EF_AI,
+        '3': MAX_EF_AF,
+        '4': MAX_EM
+    }
+    #Anos de estuda para as séries
+    yearsSeries = {
+        '1': 1,
+        '2': 1,
+        '3': 2,
+        '4': 3,
+        '5': 4,
+        '6': 5,
+        '7': 0,
+        '8': 0,
+        '9': 0,
+        '0': 0,
+    }
+
+    df[C_ANOS_ESC] = df.V038.map(yearsStage) + df.V037.map(yearsSeries)
+    df.loc[df.V038 == '5', C_ANOS_ESC] = 0
+    #Aplicar teto para os graus de escolaridade
+    #Elementar: 4 anos; Médio 1º Ciclo: 8; Médio 2º Ciclo: 11; Superior: 15
+    df.loc[(df[C_ANOS_ESC] > MAX_EF_AI) & (df.V038 == '1'), C_ANOS_ESC] = MAX_EF_AI
+    df.loc[(df[C_ANOS_ESC] > MAX_EF_AF) & (df.V038 == '2'), C_ANOS_ESC] = MAX_EF_AF
+    df.loc[(df[C_ANOS_ESC] > MAX_EM)    & (df.V038 == '3'), C_ANOS_ESC] = MAX_EM
+    df.loc[(df[C_ANOS_ESC] > MAX_ES)    & (df.V038 == '4'), C_ANOS_ESC] = MAX_ES
+    df[C_ANOS_ESC] = df[C_ANOS_ESC].astype('UInt8')
 
     #Coluna de conclusão de etapas
     #Preparar algumas variáveis
@@ -1095,9 +1257,350 @@ def educacao_1970(df):
     df.loc[V039i.between(10, 28), C_ETAPA_CONC] = EF_AI
     df.loc[V039i.between(30, 49), C_ETAPA_CONC] = EF_AF
     df.loc[V039i.between(50, 69), C_ETAPA_CONC] = EM
-    df.loc[V039i.between(70, 98), C_ETAPA_CONC] = ES
+    df.loc[V039i.between(70, 97), C_ETAPA_CONC] = ES
 
     #TODO tratar os casos de não declarados
     #df.V039 == 0
 
-    df[C_ETAPA_CONC] = df[C_ETAPA_CONC].astype('category')
+    df[C_ETAPA_CONC] = df[C_ETAPA_CONC].astype(CAT_E_TYPES)
+
+def educacao_1980(df):
+    '''
+    V519 - Sabe ler e escrever
+    ==========================
+    2    sim
+    4    esqueceu
+    6    não sabe
+    9    sem declaração
+         não aplicável
+    --------------------------
+    
+    V520 - Série que frequenta
+    ==========================
+    0    nenhuma
+    1    1ª série
+    2    2ª série
+    3    3ª série
+    4    4ª série
+    5    5ª série
+    6    6ª série
+    7    7ª série
+    8    8ª série
+    9    sem declaração
+         não aplicável
+    --------------------------
+
+    V521 - Grau que frequenta
+    =========================
+    0    nenhuma
+    1    primário
+    2    ginasial médio
+    3    1º grau
+    4    2º grau
+    5    colegial médio
+    6    supletivo 1º grau
+    7    supletivo 2º grau
+    8    superior
+    9    sem declaração
+         não aplicável
+    -------------------------
+
+    V522 - Curso não seriado frequentado
+    ========================
+    0    nenhum
+    1    pré-escolar
+    2    alfabetização para adultos
+    3    supletivo 1º grau
+    4    supletivo 2º grau
+    5    supletivo 1º grau de TV
+    6    supletivo 2º grau de TV
+    7    vestibular
+    8    mestrado ou doutorado
+    9    sem declaração
+         não aplicável
+    ------------------------
+
+    V523 - Última série concluída
+    =============================
+    0    nenhuma
+    1    1ª série
+    2    2ª série
+    3    3ª série
+    4    4ª série
+    5    5ª série
+    6    6ª série
+    7    7ª série
+    8    8ª série
+    9    sem declaração
+         não aplicável
+    -----------------------------
+    
+    V524 - Grau da última série concluída
+    =====================================
+    0    nenhuma
+    1    alfabetização de adultos
+    2    primário ou elementar
+    3    ginasial ou médio 1o. Ciclo
+    4    1o. Grau
+    5    2o. Grau
+    6    colegial ou médio 2o. Ciclo
+    7    superior
+    8    mestrado ou doutorado
+    9    sem declaração
+         não aplicável
+    -------------------------------------
+
+    V525 - Tipo do curso mais elevado concluído
+    ===========================================
+    00    sem curso concluído
+    01    primário
+    02    educação especial
+    03    agrícola elementar
+    04    comercial elementar
+    05    artesanal elementar
+    06    saúde elementar
+    07    militar elementar
+    08    outros elementares
+    10    1º grau
+    11    especial - 1º grau
+    12    agrícola - 1º ciclo
+    13    administração - 1º ciclo
+    14    contabilidade -  1º ciclo
+    15    básico comercial
+    16    eletricidade - 1º grau
+    17    mecânica - 1º ciclo
+    18    artesanato básico
+    19    enfermagem - 1º ciclo
+    20    farmácia - 1º grau
+    21    militar - 1º ciclo
+    22    normal - 1º ciclo
+    23    outros - 1º grau
+    24    colegial
+    25    educação especial - 2º grau
+    26    agrícola - 2º ciclo
+    27    administração - 2º grau
+    28    contabilidade - 2º ciclo
+    29    estatística - 2º grau
+    30    secretariado - 2º grau
+    31    comercial - 2º ciclo
+    32    desenho - 2º grau
+    33    eletricidade - 2º grau
+    34    mecânica - 2º grau
+    35    química - 2º grau
+    36    industrial - 2º ciclo
+    37    enfermagem - 2º ciclo
+    38    patologia - 2º ciclo
+    39    nutrição - 2º grau
+    40    militar - 2º ciclo
+    41    normal - 2º grau
+    42    outros - 2º ciclo
+    43    biologia - superior
+    44    educação física - superior
+    45    enfermagem - superior
+    46    farmácia - superior
+    47    medicina - superior
+    48    dentista
+    49    nutrição - superior
+    50    arquitetura - superior
+    51    ciências - bacharelado
+    52    computação - bacharelado
+    53    engenharia - superior
+    54    eletricidade - superior
+    55    engenharia - superior
+    56    química - superior
+    57    topografia - superior
+    58    estatística - superior
+    59    física - bacharelado
+    60    geologia - superior
+    61    matemática - bacharelado
+    62    química - bacharelado
+    63    astronomia - superior
+    64    agrícola - superior
+    65    veterinária - superior
+    66    agrimensura - superior
+    67    administração - superior
+    68    biblioteconomia - superior
+    69    contabilidade - superior
+    70    economia - superior
+    71    antropologia - superior
+    72    comunicação - superior
+    73    direito - superior
+    74    filosofia - bacharelado
+    75    geografia - bacharelado
+    76    história - bacharelado
+    77    educação - superior
+    78    psicologia - bacharelado
+    79    serviço social - superior
+    80    sacerdote - superior
+    81    museologia - superior
+    82    lingüística - superior
+    83    belas artes - superior
+    84    academia militar
+    85    diplomacia - superior
+    86    medicina - mestrado
+    87    biologia - mestrado
+    88    engenharia - mestrado
+    89    computação - mestrado
+    90    agronomia - mestrado
+    91    administração - mestrado
+    92    economia - mestrado
+    93    direito - mestrado
+    94    educação - mestrado
+    95    biblioteconomia - mestrado
+    96    artes - mestrado
+    99    ignorado
+    -------------------------------------------
+    '''
+
+    #Coluna de anos de escolaridade
+    df[C_ANOS_ESC] = pd.NA
+
+    #Anos base de estudo para cada grau concluído
+    yearsStageV524 = {
+        '1': 0,
+        '2': 0,
+        '3': MAX_EF_AI,
+        '4': 0,
+        '5': MAX_EF_AF,
+        '6': MAX_EF_AF,
+        '7': MAX_EM,
+        '8': MAX_ES,
+    }
+    #Anos base de estudo para cada grau frequentado
+    yearsStageV521 = {
+        '0': 0,
+        '1': 0,
+        '2': MAX_EF_AI,
+        '3': 0,
+        '4': MAX_EF_AF,
+        '5': MAX_EF_AF,
+        '6': 0,
+        '7': MAX_EF_AF,
+        '8': MAX_EM,
+    }
+    #Anos de estuda para as séries
+    yearsSeries = {
+        '0': 0,
+        '1': 1,
+        '2': 2,
+        '3': 3,
+        '4': 4,
+        '5': 5,
+        '6': 6,
+        '7': 7,
+        '8': 8,
+        '9': 0,
+    }
+
+    df[C_ANOS_ESC] = df.V524.map(yearsStageV524) + df.V523.map(yearsSeries)
+    df.loc[df.V524 == '0', C_ANOS_ESC] = 0
+
+    # Cursos não seriados
+    #df.loc[df.V522.isin({'1', '2', '3', '5'}), C_ANOS_ESC] = 0
+    df.loc[df.V522.isin({'4', '6'}) & (df[C_ANOS_ESC] < MAX_EF_AF), C_ANOS_ESC] = MAX_EF_AF
+    df.loc[(df.V522 == '7') & (df[C_ANOS_ESC] < MAX_EM), C_ANOS_ESC] = MAX_EM
+    df.loc[(df.V522 == '8') & (df[C_ANOS_ESC] < MAX_ES), C_ANOS_ESC] = MAX_ES
+
+    #Nota, p. 22 do Manual do Recenseador: "Para a maioria das pessoas que
+    #frequentam escola, estará assinalado, nas variáveis V523 e V524, o
+    #valor 0 -- Nenhum, salvo para as pessoas que tenham concluído ou
+    #interrompido algum curso, mas estejam fazendo um outro curso de mesmo grau ou grau
+    # ou grau inferior ao curso concluído
+
+    #NOTE o código abaixo é temporário, excluir após refazer o parquet
+    df.V521 = df.V521.astype('string')
+
+    # df.loc[df.V524 == '0', C_ANOS_ESC] = (df.V521.map(yearsStageV521) + df.V520.map(yearsSeries) - 1).apply(lambda s: max(s, 0))
+    anos_esc_tmp = (df.V521.map(yearsStageV521) + df.V520.map(yearsSeries) - 1).apply(lambda s: max(s, 0))
+    df.loc[:, C_ANOS_ESC] = pd.concat([anos_esc_tmp, df[C_ANOS_ESC]], axis=1).max(axis=1)
+
+    #Aplicar teto para os graus de escolaridade
+    df.loc[(df[C_ANOS_ESC] > MAX_EF_AI) & ((df.V521 == '1') | df.V524.isin({'1', '2'})), C_ANOS_ESC] = MAX_EF_AI
+    df.loc[(df[C_ANOS_ESC] > MAX_EF_AF) & (df.V521.isin({'2', '3', '6'}) | df.V524.isin({'3', '4'})), C_ANOS_ESC] = MAX_EF_AF
+    df.loc[(df[C_ANOS_ESC] > MAX_EM) & (df.V521.isin({'4', '5', '7'}) | df.V524.isin({'5', '6'})), C_ANOS_ESC] = MAX_EM
+    df.loc[(df[C_ANOS_ESC] > MAX_ES) & ((df.V521 == '8') | df.V524.isin({'7', '8'})), C_ANOS_ESC] = MAX_ES
+
+    V525i = df.V525.astype('UInt16')
+    df.loc[V525i.between(1,   8) & (df[C_ANOS_ESC] < MAX_EF_AI), C_ANOS_ESC] = MAX_EF_AI
+    df.loc[V525i.between(10, 23) & (df[C_ANOS_ESC] < MAX_EF_AF), C_ANOS_ESC] = MAX_EF_AF
+    df.loc[V525i.between(24, 42) & (df[C_ANOS_ESC] < MAX_EM),    C_ANOS_ESC] = MAX_EM
+    df.loc[V525i.between(43, 96) & (df[C_ANOS_ESC] < MAX_ES),    C_ANOS_ESC] = MAX_ES
+
+    df[C_ANOS_ESC] = df[C_ANOS_ESC].astype('UInt8')
+
+    #Coluna de conclusão de etapas
+    conc_tmp0 = pd.Series(data=pd.NA, index=df.index)
+    conc_tmp0[(V525i == 0) & df.V519.isin({'4', '6'})] = NAO_CONCLUIU_ANALF
+    conc_tmp0[(V525i == 0) & (df.V519 == '2')] = NAO_CONCLUIU_ALFA
+    conc_tmp0[(V525i == 0) & (df.V519 == '9')] = NAO_CONCLUIU_SEM_DECLARACAO
+    conc_tmp0[V525i.between(1,   8)] = EF_AI
+    conc_tmp0[V525i.between(10, 23)] = EF_AF
+    conc_tmp0[V525i.between(24, 42)] = EM
+    conc_tmp0[V525i.between(43, 96)] = ES
+
+    conc_tmp1 = pd.Series(data=pd.NA, index=df.index)
+    #TODO incluir supletivo 1º grau
+    conc_tmp1[(df.V521 == '2') 
+              | ((df.V521 == '3') & df.V520.isin({'5', '6', '7', '8'})) 
+              | (df.V524 == '3') 
+              | ((df.V524 == '4') & df.V523.isin({'4', '5', '6', '7'}))] = EF_AI
+
+    conc_tmp1[df.V521.isin({'4', '5', '7'})
+              | df.V521.isin({'4', '5'})
+              | ((df.V524 == '3') & (df.V523 == '4')) 
+              | ((df.V524 == '4') & (df.V523 == '8')) 
+              | (df.V524.isin({'5', '6'}))] = EF_AF
+
+    conc_tmp1[(df.V521 == '8')
+              | (df.V522 == '7')
+              | (df.V524.isin({'5', '6'}) & df.V523.isin({'3', '4'})) 
+              | (df.V524 == '7')] = EM
+
+    conc_tmp1[(df.V522 == '8')
+              | ((df.V524 == '7') & df.V523.isin({'5', '6', '7', '8'})) 
+              | (df.V524 == '8')] = ES
+               
+    df[C_ETAPA_CONC] = pd.concat([conc_tmp0, conc_tmp1], axis=1).astype(CAT_E_TYPES).max(axis=1)
+
+    #Coluna etapa frequentada
+    #TODO supletivos seriados
+    freq = pd.Series(data=pd.NA, index=df.index)
+    freq[df.V521.isin({'1', '3'}) & (df.V520 == '1')] = EF_1
+    freq[df.V521.isin({'1', '3'}) & (df.V520 == '2')] = EF_2
+    freq[df.V521.isin({'1', '3'}) & (df.V520 == '3')] = EF_3
+
+    freq[((df.V521 == '1') & df.V520.isin({'4', '5', '6', '7', '8'}))
+         | ((df.V521 == '3') & (df.V520 == '4'))] = EF_4
+
+    freq[((df.V521 == '3') & (df.V520 == '5'))
+         | ((df.V521 == '2') & (df.V520 == '1'))] = EF_5
+
+    freq[((df.V521 == '3') & (df.V520 == '6'))
+         | ((df.V521 == '2') & (df.V520 == '2'))] = EF_6
+
+    freq[((df.V521 == '3') & (df.V520 == '7'))
+         | ((df.V521 == '2') & (df.V520 == '4'))] = EF_7
+
+    freq[((df.V521 == '3') & (df.V520 == '8'))
+         | ((df.V521 == '2') & (df.V520 == '4'))] = EF_8
+
+    freq[df.V521.isin({'4', '5'}) & (df.V520 == '1')] = EM_1
+    freq[df.V521.isin({'4', '5'}) & (df.V520 == '2')] = EM_2
+    freq[df.V521.isin({'4', '5'}) & df.V520.isin({'3', '4', '5', '6', '7', '8'})] = EM_3
+
+    freq[(df.V521 == '8') & (df.V520 == '1')] = ES_1
+    freq[(df.V521 == '8') & (df.V520 == '2')] = ES_2
+    freq[(df.V521 == '8') & (df.V520 == '3')] = ES_3
+    freq[(df.V521 == '8') & (df.V520 == '4')] = ES_4
+    freq[(df.V521 == '8') & (df.V520 == '5')] = ES_5
+    freq[(df.V521 == '8') & df.V520.isin({'6', '7', '8'})] = ES_6
+
+    freq[df.V522 == '1'] = PE
+    freq[df.V522 == '2'] = AA
+    freq[df.V522.isin({'3', '5'})] = S1
+    freq[df.V522.isin({'4', '6'})] = S2
+    freq[df.V522 == '7'] = V
+    freq[df.V522 == '8'] = PG
+
+    df[C_FREQ] = freq.astype(CAT_F_TYPES)
+
