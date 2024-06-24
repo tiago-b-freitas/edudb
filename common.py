@@ -53,8 +53,17 @@ def logging(type_, args):
 def weight_stats(df, threshold):
     df.dropna(inplace=True)
     if len(df) <= threshold:
+        print_info(f'O cruzamento da categoria {df.name} foi excluída '
+                   f'pois possui contagem ({len(df)}) menor ou igual ao '
+                   f'limite mínimo ({threshold})')
         return False
-    return DescrStatsW(df.iloc[:, 0], df.iloc[:, 1])
+    
+    elif df.iloc[:, 1].sum() == 0:
+        print_info(f'O cruzamento da categoria {df.name} foi excluída '
+                   f'pois possui a soma dos pesos é igual a zero')
+        return False
+
+    return DescrStatsW(data=df.iloc[:, 0], weights=df.iloc[:, 1])
 
 
 def mean_weight(df, threshold):
@@ -310,16 +319,41 @@ class handleDatabase:
             return self.map_dict_vars
 
         df = self.map_dict_vars
-        nome = df.loc[df.COD_VAR == var, 'NOME_VAR'].values[0]
-        vars_cod = df.loc[df.COD_VAR == var, 'MAP_VAR'].values[0]
-        return nome, vars_cod
+        if var in df.COD_VAR.values:
+            name = df.loc[df.COD_VAR == var, 'NOME_VAR'].values[0]
+            vars_cod = df.loc[df.COD_VAR == var, 'MAP_VAR'].values[0]
+        else:
+            name = var
+            vars_cod = None
+        return name, vars_cod
+
+    def transform_axis(self, df, axis_type, mapper):
+        if axis_type == 'columns':
+            df = df.unstack(list(range(-1, -len(mapper)-1, -1)))
+        axis = getattr(df, axis_type)
+        iter_levels = []
+        names = []
+        for level, (name, map_var) in enumerate(mapper):
+            values = axis.get_level_values(level)
+            if map_var is not None:
+                values = values.map(map_var)
+            iter_levels.append(values)
+            names.append(name)
+        new_axis = pd.MultiIndex.from_arrays(iter_levels, names=names)
+        setattr(df, axis_type, new_axis)
+        axis = getattr(df, axis_type)
+        if axis_type == 'columns':
+            df = df.loc[:, axis.dropna()]
+        else:
+            df = df.loc[axis.dropna()]
+        return df
 
     def crosstab(self,
                  index_vars,
                  columns_vars=None,
                  values=None,
                  aggfunc='mean',
-                 threshold=0,
+                 threshold=50,
                  normalize=False,
                  margins=False,
                  margins_name='All',
@@ -350,39 +384,19 @@ class handleDatabase:
                         aggfunc = median_weight
                     case 'std':
                         aggfunc = std_weight
-                table = g[[values, self.weight_var]].apply(lambda g:aggfunc(g, threshold))
+                table = g[[values, self.weight_var]].apply(lambda g: aggfunc(g, threshold))
             else:
-                match aggfunc:
-                    case 'mean':
-                        table = g[values].mean()
-                    case 'median':
-                        table = g[values].median()
-                    case 'std':
-                        table = g[values].std()
+                #TODO tratar propriamente o erro de ser um aggfunc não existente
+                table = getattr(g[values], aggfunc)()
         
         index_mapper = [self.get_map_var(v) for v in index_vars]
         columns_mapper = [self.get_map_var(v) for v in columns_vars if v is not None]
 
         if columns_mapper:
-            table = table.unstack(list(range(-1, -len(columns_mapper)-1, -1)))
-            iter_levels = []
-            names = []
-            for level, (name, map_var) in enumerate(columns_mapper):
-                iter_levels.append(table.columns.get_level_values(level).map(map_var))
-                names.append(name)
-            new_columns = pd.MultiIndex.from_arrays(iter_levels, names=names)
-            table.columns = new_columns
-            table = table[table.columns.dropna()]
+            table = self.transform_axis(table, 'columns', columns_mapper)
 
-        iter_levels = []
-        names = []
-        for level, (name, map_var) in enumerate(index_mapper):
-            iter_levels.append(table.index.get_level_values(level).map(map_var))
-            names.append(name)
-        new_index = pd.MultiIndex.from_arrays(iter_levels, names=names)
-        table.index = new_index
-        table = table.loc[table.index.dropna()]
-        
+        table = self.transform_axis(table, 'index', index_mapper)
+
         if values is not None:
             return table
         else:
