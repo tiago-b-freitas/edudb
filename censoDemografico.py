@@ -873,24 +873,29 @@ class handleCensoDemografico(handleDatabase):
                             + self.df.V1002.astype('string')).astype('category')
             self.cod_micro = (self.df.V0001.astype('string')
                             + self.df.V1003.astype('string')).astype('category')
-        self.educ()
+        self.complementary_vars()
         return self.df
 
-    def educ(self):
+    def complementary_vars(self):
         match self.year:
             case 1960:
                 educacao_1960(self.df)
+                # idade_1960(self.df)
             case 1970:
                 educacao_1970(self.df)
+                # idade_1970(self.df)
             case 1980:
                 educacao_1980(self.df)
+                # idade_1980(self.df)
             case 1991:
                 educacao_1991(self.df)
+                # idade_1991(self.df)
             case 2000:
                 educacao_2000(self.df)
-            case other:
-                #TODO
-                print_error('Ainda não implementado')
+                # idade_2000(self.df)
+            case 2010:
+                idade_2010(self.df)
+                educacao_2010(self.df)
 
 
 NAO_CONCLUIU_SEM_DECLARACAO = 'Não concluiu e sem declaração de alfabetização'
@@ -913,6 +918,7 @@ E_GRADES = [
 
 NAO_FREQUENTA = 'Não frequenta'
 EF_SD = 'Ensino Fundamental - Sem declaração de série'
+EF_0  = 'Ensino Fundamental - 1º Ano'
 EF_1  = 'Ensino Fundamental - 1ª Série'
 EF_2  = 'Ensino Fundamental - 2ª Série'
 EF_3  = 'Ensino Fundamental - 3ª Série'
@@ -942,7 +948,7 @@ PG    = 'Pós-graduação'
 F_GRADES = [
     NAO_FREQUENTA,
     PE, AA, EF_SD,
-    EF_1, EF_2, EF_3, EF_4,
+    EF_0, EF_1, EF_2, EF_3, EF_4,
     EF_5, EF_6, EF_7, EF_8,
     S1, EM_SD,
     EM_1, EM_2, EM_3,
@@ -1857,21 +1863,21 @@ def educacao_1991(df):
 def educacao_2000(df):
     '''
     V0428 - Sabe ler e escrever
-    ===========================
+    ---------------------------
     1   Sabe ler e escrever
     2   Não sabe
-    ---------------------------
+    ===========================
 
     V0429 - Frequenta escola ou creche
-    ==================================
+    ----------------------------------
     1   Sim, rede particular
     2   Sim, rede pública
     3   Não, já frequentou
     4   Nunca frequentou
-    ----------------------------------
+    ==================================
 
     V0430 - Curso que frequenta
-    ===========================
+    ---------------------------
     01  Creche
     02  Pré-escolar
     03  Classe de alfabetização
@@ -1886,10 +1892,10 @@ def educacao_2000(df):
     12  Superior – graduação
     13  Mestrado ou doutorado
         Para os não estudantes
-    ---------------------------
+    ===========================
 
     V0431 - Série que frequenta
-    ===========================
+    ---------------------------
     1   Primeira Série
     2   Segunda Série
     3   Terceira Série
@@ -1900,10 +1906,10 @@ def educacao_2000(df):
     8   Oitava Série
     9   Curso não seriado
         Para os não estudantes
-    ---------------------------
+    ===========================
 
     V0432 - Curso mais elevado que frequentou, concluindo pelo menos uma série
-    ==========================================================================
+    --------------------------------------------------------------------------
     1   Alfabetização de adultos
     2   Antigo primário
     3   Antigo ginásio
@@ -1914,10 +1920,10 @@ def educacao_2000(df):
     8   Mestrado ou doutorado
     9   Nenhum
         Para os estudantes
-    --------------------------------------------------------------------------
+    ==========================================================================
 
     V0433 - Última série concluída com aprovação
-    ============================================
+    --------------------------------------------
     01  Primeira Série
     02  Segunda Série
     03  Terceira Série
@@ -1929,17 +1935,17 @@ def educacao_2000(df):
     09  Curso não seriado
     10  Nenhuma
         Para os estudantes
-    --------------------------------------------
+    ============================================
 
     V0434 - Concluiu o curso no qual estudou
-    ========================================
+    ----------------------------------------
     1   Sim
     2   Não
         Para os estudantes
-    ----------------------------------------
+    ========================================
 
     V4355 - Código do curso mais elevado concluído
-    ==============================================
+    ----------------------------------------------
     01  Outros cursos de Graduação
     02  Não superior
     09  Outros cursos de Mestrado ou Doutorado
@@ -1999,10 +2005,10 @@ def educacao_2000(df):
     83  Outros de Letras e Artes - Graduação
     89  Letras e Artes - Mestrado ou Doutorado
     91  Militar
-    ----------------------------------------------
+    ==============================================
 
     V4300 - Anos de estudo
-    ======================
+    ----------------------
     00  Sem instrução ou menos de 1 ano
     01  1 ano
     02  2 anos
@@ -2023,7 +2029,7 @@ def educacao_2000(df):
     17  17 anos ou mais
     20  Não determinado
     30  Alfabetização de adultos
-    ----------------------
+    ======================
     '''
 
     #Coluna de anos de escolaridade
@@ -2100,3 +2106,182 @@ def educacao_2000(df):
 
     df[C_ETAPA_CONC] = pd.concat([conc_tmp0, conc_tmp1], axis=1).astype(CAT_E_TYPES).max(axis=1)
 
+def educacao_2010(df):
+    '''
+    V0627 - Sabe ler e escrever
+    ---------------------------
+    1   Sim
+    2   Não
+        Pessoas menores de 5 anos de idade
+    ===========================
+
+    V0628 - Frequenta escola ou creche
+    ----------------------------------
+    1   Sim, pública
+    2   Sim, particular
+    3   Não, já frequentou
+    4   Não, nunca frequentou
+    ==================================
+
+    V0629 - Curso que frequenta
+    ---------------------------
+    01  Creche
+    02  Pré-escolar (maternal e jardim da infância)
+    03  Classe de alfabetização - CA
+    04  Alfabetização de jovens e adultos
+    05  Regular do ensino fundamental
+    06  Educação de jovens e adultos - EJA ou supletivo do ensino fundamental
+    07  Regular do ensino médio
+    08  Educação de jovens e adultos - EJA ou supletivo do ensino médio
+    09  Superior de graduação
+    10  Especialização de nível superior (mínimo de 360 horas)
+    11  Mestrado
+    12  Doutorado
+        Não frequentavam ou nunca frequentaram escola ou creche
+    ===========================
+
+    V0630 - Serie/ano que frequenta 
+    --------------------------------
+    01  Primeiro ano
+    02  Primeira série / Segundo ano
+    03  Segunda série / Terceiro ano
+    04  Terceira série / Quarto ano
+    05  Quarta série / Quinto ano
+    06  Quinta série / Sexto ano
+    07  Sexta série / Sétimo ano
+    08  Sétima série / Oitavo ano
+    09  Oitava série / Nono ano
+    10  Não seriado
+        Não frequentavam, ou que nunca frequentaram escola ou creche, ou quem frequentava o curso Regular do Ensino Médio
+    ================================
+
+    V0631 - Série que frequenta
+    ---------------------------
+    1   Primeira série
+    2   Segunda série
+    3   Terceira série
+    4   Quarta série
+    5   Não seriado
+        Não frequentavam, ou que nunca frequentaram escola ou creche, ou quem frequentava o curso Regular do Ensino Fundamental
+    ===========================
+    Nota: apenas para aqueles que frequentavam o Ensino Médio
+
+    V0632 - Conclusão de outro curso superior de graduação
+    ------------------------------------------------------
+    1   Sim
+    2   Não
+        Não frequentavam, ou que nunca frequentaram escola ou creche, ou quem frequentava o curso Superior de Graduação
+    ======================================================
+
+    V0633 - Curso mais elevado que frequentou
+    -----------------------------------------
+    01  Creche, pré-escolar (maternal e jardim de infância), classe de alfabetização - CA
+    02  Alfabetização de jovens e adultos
+    03  Antigo primário (elementar)
+    04  Antigo ginásio (médio 1º ciclo)
+    05  Ensino fundamental ou 1º grau (da 1ª a 3ª série/ do 1º ao 4º ano)
+    06  Ensino fundamental ou 1º grau (4ª série/ 5º ano)
+    07  Ensino fundamental ou 1º grau (da 5ª a 8ª série/ 6º ao 9º ano)
+    08  Supletivo do ensino fundamental ou do 1º grau
+    09  Antigo científico, clássico, etc.....(médio 2º ciclo)
+    10  Regular ou supletivo do ensino médio ou do 2º grau
+    11  Superior de graduação
+    12  Especialização de nível superior ( mínimo de 360 horas )
+    13  Mestrado
+    14  Doutorado
+        Frequentavam escola ou creche ou aqueles que nunca frequentaram.
+    =========================================
+
+    V0634 - Conclusão deste curso
+    -----------------------------
+    1   Sim
+    2   Não
+        Frequentavam escola ou creche ou nunca frequentaram
+    =============================
+
+    V0635 - Espécie do curso mais elevado concluído
+    -----------------------------------------------
+    1   Superior de graduação
+    2   Mestrado
+    3   Doutorado
+    ===============================================
+
+    V6400 - Nível de instrução
+    --------------------------
+    1   Sem instrução e fundamental incompleto
+    2   Fundamental completo e médio incompleto
+    3   Médio completo e superior incompleto
+    4   Superior completo
+    5   Não determinado
+    ==========================
+    '''
+    #Coluna etapa frequentada
+    freq = pd.Series(data=pd.NA, index=df.index)
+
+    V0630i = df.V0630.astype('UInt8')
+
+    freq[df.V0628.isin({'3', '4'})] = NAO_FREQUENTA
+    f_EF = df.V0629.isin({'05', '06'})
+    freq[f_EF & (V0630i ==  1)] = EF_0
+    freq[f_EF & (V0630i ==  2)] = EF_1
+    freq[f_EF & (V0630i ==  3)] = EF_2
+    freq[f_EF & (V0630i ==  4)] = EF_3
+    freq[f_EF & (V0630i ==  5)] = EF_4
+    freq[f_EF & (V0630i ==  6)] = EF_5
+    freq[f_EF & (V0630i ==  7)] = EF_6
+    freq[f_EF & (V0630i ==  8)] = EF_7
+    freq[f_EF & (V0630i ==  9)] = EF_8
+    freq[f_EF & (V0630i == 10)] = EF_SD
+
+    f_EM = df.V0629 == '07'
+    freq[f_EM & (df.V0631 == '1')] = EM_1
+    freq[f_EM & (df.V0631 == '2')] = EM_2
+    freq[f_EM & df.V0631.isin({'3', '4'})] = EM_3
+    freq[f_EM & (df.V0631 == '5')] = EM_SD
+
+    f_ES = df.V0629 == '09'
+    #Não há registro da série nesta edição do Censo
+    freq[f_ES] = ES_SD
+
+    freq[df.V0629.isin({'01', '02', '03'})] = PE
+    freq[df.V0629 == '04'] = AA
+    freq[df.V0629 == '06'] = S1
+    freq[df.V0629 == '08'] = S2
+    #Os outros Censos não são claros quanto a inclusão de especializações de nível superior
+    freq[df.V0629.isin({'10', '11', '12'})] = PG
+
+    df[C_FREQ] = freq.astype(CAT_F_TYPES)
+
+    #Coluna de conclusão de etapas
+    conc_tmp = pd.Series(data=pd.NA, index=df.index)
+
+    f_nao_concluiu = (
+        (df.V6400 == '1')
+           & (df[C_FREQ].isin({PE, AA, EF_0, EF_1, EF_2, EF_3, EF_4})
+            | (df[C_FREQ].isin({S1, EF_SD}) & (df.idade <= 10))
+            | df.V0633.isin({'01', '02', '05'})
+            | ((df.V0633 == '03') & (df.V0634 == '2'))
+            | (df.V0628 == '4'))
+    )
+
+    conc_tmp[f_nao_concluiu] = NAO_CONCLUIU_SEM_DECLARACAO
+    conc_tmp[f_nao_concluiu & (df.V0627 == '2')] = NAO_CONCLUIU_ANALF
+    conc_tmp[f_nao_concluiu & (df.V0627 == '1')] = NAO_CONCLUIU_ALFA
+    #Decisão arbitrária de incluir V0633 == '08' (Supletivo), S1 e
+    #V0633 = '06' 4ª Série do EF como EF_AI completo
+    conc_tmp[(df.V6400 == '1')
+           & (  df[C_FREQ].isin({EF_5, EF_6, EF_7, EF_8})
+              | (df[C_FREQ].isin({S1, EF_SD}) & (df.idade > 10))
+              | ((df.V0633 == '03') & (df.V0634 == '1'))
+              | (df.V0633 == '06')
+              | (df.V0633.isin({'04', '07', '08'}) & (df.V0634 == '2')))] = EF_AI
+    conc_tmp[df.V6400 == '2'] = EF_AF
+    conc_tmp[df.V6400 == '3'] = EM
+    conc_tmp[df.V6400 == '4'] = ES
+
+    df[C_ETAPA_CONC] = conc_tmp.astype(CAT_E_TYPES)
+
+
+AGE = 'idade'
+def idade_2010(df):
+    df[AGE] = df.V6036
