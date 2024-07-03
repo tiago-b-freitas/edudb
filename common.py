@@ -327,7 +327,7 @@ class handleDatabase:
             vars_cod = None
         return name, vars_cod
 
-    def transform_axis(self, df, axis_type, mapper):
+    def transform_axis(self, df, axis_type, mapper, dropna):
         if axis_type == 'columns':
             df = df.unstack(list(range(-1, -len(mapper)-1, -1)))
         axis = getattr(df, axis_type)
@@ -342,10 +342,12 @@ class handleDatabase:
         new_axis = pd.MultiIndex.from_arrays(iter_levels, names=names)
         setattr(df, axis_type, new_axis)
         axis = getattr(df, axis_type)
+        if dropna:
+            axis.dropna()
         if axis_type == 'columns':
-            df = df.loc[:, axis.dropna()]
+            df = df.loc[:, axis]
         else:
-            df = df.loc[axis.dropna()]
+            df = df.loc[axis]
         return df
 
     def crosstab(self,
@@ -357,7 +359,8 @@ class handleDatabase:
                  normalize=False,
                  margins=False,
                  margins_name='All',
-                 filter_=None):
+                 filter_=None,
+                 dropna=False):
 
         if filter_ is None:
             df = self.df
@@ -371,9 +374,9 @@ class handleDatabase:
         vars_g = [*index_vars, *columns_vars] if columns_vars[0] is not None else index_vars
         if values is None:
             if self.weight_var is None:
-                table = df.groupby(vars_g, observed=False).size()
+                table = df.groupby(vars_g, observed=False, dropna=dropna).size()
             else:
-                table = df.groupby(vars_g, observed=False)[self.weight_var].sum()
+                table = df.groupby(vars_g, observed=False, dropna=dropna)[self.weight_var].sum()
         else:
             g = df.groupby(vars_g, observed=False)
             if self.weight_var is not None:
@@ -393,9 +396,9 @@ class handleDatabase:
         columns_mapper = [self.get_map_var(v) for v in columns_vars if v is not None]
 
         if columns_mapper:
-            table = self.transform_axis(table, 'columns', columns_mapper)
+            table = self.transform_axis(table, 'columns', columns_mapper, dropna)
 
-        table = self.transform_axis(table, 'index', index_mapper)
+        table = self.transform_axis(table, 'index', index_mapper, dropna)
 
         if values is not None:
             return table
