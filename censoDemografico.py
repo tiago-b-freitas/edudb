@@ -886,6 +886,8 @@ class handleCensoDemografico(handleDatabase):
                 educacao_1980(self.df)
             case 1991:
                 educacao_1991(self.df)
+            case 2000:
+                educacao_2000(self.df)
             case other:
                 #TODO
                 print_error('Ainda não implementado')
@@ -969,12 +971,12 @@ def educacao_1960(df):
     '''
     V211 - Alfabetização
     ====================
-    0	 Lê e Freqüenta Escola
-    1	 Lê e não Freqüenta Escola
-    2	 não Lê e Freqüenta Escola
-    3	 não Lê e não Freqüenta Escola
-    4	 Ignorada
-         Não aplicável (4 anos de idade ou menos) ou Informação Faltante (Registro Corrompido)
+    0   Lê e Freqüenta Escola
+    1   Lê e não Freqüenta Escola
+    2   não Lê e Freqüenta Escola
+    3   não Lê e não Freqüenta Escola
+    4   Ignorada
+        Não aplicável (4 anos de idade ou menos) ou Informação Faltante (Registro Corrompido)
 
     V212 - Última série concluída
     =============================
@@ -1851,3 +1853,250 @@ def educacao_1991(df):
     freq[df.V0326 == '6'] = PG
 
     df[C_FREQ] = freq.astype(CAT_F_TYPES)
+
+def educacao_2000(df):
+    '''
+    V0428 - Sabe ler e escrever
+    ===========================
+    1   Sabe ler e escrever
+    2   Não sabe
+    ---------------------------
+
+    V0429 - Frequenta escola ou creche
+    ==================================
+    1   Sim, rede particular
+    2   Sim, rede pública
+    3   Não, já frequentou
+    4   Nunca frequentou
+    ----------------------------------
+
+    V0430 - Curso que frequenta
+    ===========================
+    01  Creche
+    02  Pré-escolar
+    03  Classe de alfabetização
+    04  Alfabetização de adultos
+    05  Ensino fundamental ou 1º grau – regular seriado
+    06  Ensino fundamental ou 1º grau – regular não-seriado
+    07  Supletivo (ensino fundamental ou 1º grau)
+    08  Ensino médio ou 2º grau – regular seriado
+    09  Ensino médio ou 2º grau – regular não-seriado
+    10  Supletivo (ensino médio ou 2º grau)
+    11  Pré-vestibular
+    12  Superior – graduação
+    13  Mestrado ou doutorado
+        Para os não estudantes
+    ---------------------------
+
+    V0431 - Série que frequenta
+    ===========================
+    1   Primeira Série
+    2   Segunda Série
+    3   Terceira Série
+    4   Quarta Série
+    5   Quinta Série
+    6   Sexta Série
+    7   Sétima Série
+    8   Oitava Série
+    9   Curso não seriado
+        Para os não estudantes
+    ---------------------------
+
+    V0432 - Curso mais elevado que frequentou, concluindo pelo menos uma série
+    ==========================================================================
+    1   Alfabetização de adultos
+    2   Antigo primário
+    3   Antigo ginásio
+    4   Antigo clássico, científico, etc.
+    5   Ensino fundamental ou 1º grau
+    6   Ensino médio ou 2º Grau
+    7   Superior – graduação
+    8   Mestrado ou doutorado
+    9   Nenhum
+        Para os estudantes
+    --------------------------------------------------------------------------
+
+    V0433 - Última série concluída com aprovação
+    ============================================
+    01  Primeira Série
+    02  Segunda Série
+    03  Terceira Série
+    04  Quarta Série
+    05  Quinta Série
+    06  Sexta Série
+    07  Sétima Série
+    08  Oitava Série
+    09  Curso não seriado
+    10  Nenhuma
+        Para os estudantes
+    --------------------------------------------
+
+    V0434 - Concluiu o curso no qual estudou
+    ========================================
+    1   Sim
+    2   Não
+        Para os estudantes
+    ----------------------------------------
+
+    V4355 - Código do curso mais elevado concluído
+    ==============================================
+    01  Outros cursos de Graduação
+    02  Não superior
+    09  Outros cursos de Mestrado ou Doutorado
+    11  Agronomia - Graduação
+    12  Medicina Veterinária - Graduação
+    13  Outros de Ciências Agrárias - Graduação
+    19  Ciências Agrárias - Mestrado ou Doutorado
+    21  Biologia - Graduação
+    22  Educação Física - Graduação
+    23  Enfermagem - Graduação
+    24  Farmácia - Graduação
+    25  Medicina - Graduação
+    26  Odontologia - Graduação
+    27  Outros de Ciências Biológicas e da Saúde - Graduação
+    28  Medicina - Mestrado ou Doutorado
+    29  Outros de Ciências Biológicas e da Saúde - Mestrado ou Doutorado
+    31  Arquitetura e Urbanismo - Graduação
+    32  Ciências - Graduação
+    33  Ciências da Computação - Graduação
+    34  Engenharia Civil - Graduação
+    35  Engenharia Elétrica e Eletrônica - Graduação
+    36  Engenharia Mecânica - Graduação
+    37  Engenharia Química e Industrial - Graduação
+    38  Outros cursos de Engenharia - Graduação
+    39  Engenharia - Mestrado ou Doutorado
+    41  Estatística - Graduação
+    42  Física - Graduação
+    43  Geologia - Graduação
+    44  Matemática - Graduação
+    45  Química - Graduação
+    46  Outros de Ciências Exatas e Tecnológicas, exclusive Engenharia - Graduação
+    49  Outros de Ciências Exatas e Tecnológicas, exclusive Engenharia - Mestrado ou doutorado
+    51  Administração - Graduação
+    52  Biblioteconomia - Graduação
+    53  Ciências Contábeis e Atuariais - Graduação
+    54  Ciências Econômicas - Graduação
+    55  Ciências e Estudos Sociais - Graduação
+    56  Comunicação Social - Graduação
+    57  Direito - Graduação
+    58  Filosofia - Graduação
+    59  Formação Professores Disciplinas Especiais - Graduação
+    61  Geografia - Graduação
+    62  História - Graduação
+    63  Pedagogia - Graduação
+    64  Propaganda e Marketing - Graduação
+    65  Psicologia - Graduação
+    66  Serviço Social - Graduação
+    67  Teologia - Graduação
+    68  Outros de Ciências Humanas e Sociais - Graduação
+    75  Administração - Mestrado ou Doutorado
+    76  Ciências Econômicas e Contábeis - Mestrado ou Doutorado
+    77  Direito - Mestrado ou Doutorado
+    78  Pedagogia - Mestrado ou Doutorado
+    79  Outros de Ciências Humanas e Sociais - Mestrado ou Doutorado
+    81  Letras - Graduação
+    82  Artes - Graduação
+    83  Outros de Letras e Artes - Graduação
+    89  Letras e Artes - Mestrado ou Doutorado
+    91  Militar
+    ----------------------------------------------
+
+    V4300 - Anos de estudo
+    ======================
+    00  Sem instrução ou menos de 1 ano
+    01  1 ano
+    02  2 anos
+    03  3 anos
+    04  4 anos
+    05  5 anos
+    06  6 anos
+    07  7 anos
+    08  8 anos
+    09  9 anos
+    10  10 anos
+    11  11 anos
+    12  12 anos
+    13  13 anos
+    14  14 anos
+    15  15 anos
+    16  16 anos
+    17  17 anos ou mais
+    20  Não determinado
+    30  Alfabetização de adultos
+    ----------------------
+    '''
+
+    #Coluna de anos de escolaridade
+    df[C_ANOS_ESC] = pd.NA
+    
+    V4300i = df.V4300.astype('UInt8')
+    df.loc[V4300i.between(0, 17), C_ANOS_ESC] = V4300i[V4300i.between(0, 17)]
+    df.loc[V4300i == 30, C_ANOS_ESC] = 0
+    df.loc[(V4300i == 8) & df.V0432.isin({'4', '6'}) & (df.V0434 == '1'), C_ANOS_ESC] = 11 # Possível erro na variável V4300 - anos de estudo
+    df[C_ANOS_ESC] = df[C_ANOS_ESC].astype('UInt8')
+
+    #Coluna etapa frequentada
+    freq = pd.Series(data=pd.NA, index=df.index)
+
+    V0431i = df.V0431.astype('UInt8')
+
+    freq[df.V0429.isin({'3', '4'})] = NAO_FREQUENTA
+    f_EF = df.V0430.isin({'05', '06', '07'})
+    freq[f_EF & (V0431i == 1)] = EF_1
+    freq[f_EF & (V0431i == 2)] = EF_2
+    freq[f_EF & (V0431i == 3)] = EF_3
+    freq[f_EF & (V0431i == 4)] = EF_4
+    freq[f_EF & (V0431i == 5)] = EF_5
+    freq[f_EF & (V0431i == 6)] = EF_6
+    freq[f_EF & (V0431i == 7)] = EF_7
+    freq[f_EF & (V0431i == 8)] = EF_8
+    freq[f_EF & (V0431i == 9)] = EF_SD
+
+    f_EM = df.V0430.isin({'08', '09', '10'})
+    freq[f_EM & (V0431i == 1)] = EM_1
+    freq[f_EM & (V0431i == 2)] = EM_2
+    freq[f_EM & V0431i.between(3, 8)] = EM_3
+    freq[f_EM & (V0431i == 9)] = EM_SD
+
+    f_ES = df.V0430 == '12'
+    freq[f_ES & (V0431i == 1)] = ES_1
+    freq[f_ES & (V0431i == 2)] = ES_2
+    freq[f_ES & (V0431i == 3)] = ES_3
+    freq[f_ES & (V0431i == 4)] = ES_4
+    freq[f_ES & (V0431i == 5)] = ES_5
+    freq[f_ES & (V0431i >= 6)] = ES_6
+    freq[f_ES & (V0431i == 9)] = ES_SD
+
+    freq[df.V0430.isin({'01', '02', '03'})] = PE
+    freq[df.V0430 == '04'] = AA
+    freq[(df.V0430 == '07') & (V0431i == 9)] = S1
+    freq[(df.V0430 == '10') & (V0431i == 9)] = S2
+    freq[df.V0430 == '11'] = V
+    freq[df.V0430 == '13'] = PG
+
+    df[C_FREQ] = freq.astype(CAT_F_TYPES)
+
+    #Coluna de conclusão de etapas
+    conc_tmp0 = pd.Series(data=pd.NA, index=df.index)
+    conc_tmp0[(df.V0432 == '9') & (df.V0428 == '2')] = NAO_CONCLUIU_ANALF
+    conc_tmp0[(df.V0432 == '9') & (df.V0428 == '1')] = NAO_CONCLUIU_ALFA
+    conc_tmp0[((df.V0432 == '2') & (df.V0434 == '1'))
+            | ((df.V0432 == '3') & (df.V0434 == '2'))
+            | ((df.V0432 == '5') & df.V0433.isin({'04', '05', '06', '07'}))] = EF_AI
+    conc_tmp0[(df.V0432.isin({'3', '5'}) & (df.V0434 == '1'))
+            | (df.V0432.isin({'4', '6'}) & (df.V0434 == '2'))] = EF_AF
+    conc_tmp0[(df.V0432.isin({'4', '6'}) & (df.V0434 == '1'))
+           | ((df.V0432 == '7') & (df.V0434 == '2'))] = EM
+    conc_tmp0[((df.V0432 == '7') & (df.V0434 == '1'))
+             | (df.V0432 == '8')] = ES
+
+    conc_tmp1 = pd.Series(data=pd.NA, index=df.index)
+    conc_tmp1[df[C_FREQ].isin({EF_1, EF_2, EF_3, EF_4, PE, AA}) & (df.V0428 == '1')] = NAO_CONCLUIU_ANALF
+    conc_tmp1[df[C_FREQ].isin({EF_1, EF_2, EF_3, EF_4, PE, AA}) & (df.V0428 == '2')] = NAO_CONCLUIU_ALFA
+    conc_tmp1[df[C_FREQ].isin({EF_5, EF_6, EF_7, EF_8, S1})]= EF_AI
+    conc_tmp1[df[C_FREQ].isin({EM_1, EM_2, EM_3, S2})]= EF_AF
+    conc_tmp1[df[C_FREQ].isin({ES_1, ES_2, ES_3, ES_4, ES_5, ES_6, V})]= EM
+    conc_tmp1[df[C_FREQ] == PG] = ES
+
+    df[C_ETAPA_CONC] = pd.concat([conc_tmp0, conc_tmp1], axis=1).astype(CAT_E_TYPES).max(axis=1)
+
