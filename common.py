@@ -402,9 +402,9 @@ class handleDatabase:
         else:
             n = str(normalize)
             if n in ('index', '0'):
-                return table.div(table.sum(axis=normalize))
+                return table.div(table.sum(axis=normalize)).astype('Float64')
             elif n in ('columns', '1'):     
-                return table.div(table.sum(axis=normalize), axis='index')
+                return table.div(table.sum(axis=normalize), axis='index').astype('Float64')
             else:
-                return table.astype('UInt64')
+                return table.round().astype('UInt64')
 
