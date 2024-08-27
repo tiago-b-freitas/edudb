@@ -173,7 +173,7 @@ class handleCensoDemografico(handleDatabase):
                             dtype = 'string'
                             if tipo == 'C':
                                 dtype = 'category'
-                            self.dtypes[var] = dtype
+                            self.dtypes[var.strip()] = dtype
 
                         self.df_dict.columns = ['var', 'name', 'pos', 'end_pos',
                                                 'int_part', 'frac_part', 'type']
@@ -877,25 +877,38 @@ class handleCensoDemografico(handleDatabase):
         return self.df
 
     def complementary_vars(self):
-        match self.year:
-            case 1960:
-                educacao_1960(self.df)
-                # idade_1960(self.df)
-            case 1970:
-                educacao_1970(self.df)
-                # idade_1970(self.df)
-            case 1980:
-                educacao_1980(self.df)
-                # idade_1980(self.df)
-            case 1991:
-                educacao_1991(self.df)
-                # idade_1991(self.df)
-            case 2000:
-                educacao_2000(self.df)
-                # idade_2000(self.df)
-            case 2010:
-                idade_2010(self.df)
-                educacao_2010(self.df)
+        if self.year  not in (1970, 2010):
+            print_error(f'Não implementado para o ano {self.year}')
+            return
+
+        g = globals()
+        g[f'age_{self.year}'](self.df)
+        g[f'educacao_{self.year}'](self.df)
+        g[f'state_housing_{self.year}'](self.df)
+        g[f'uf_{self.year}'](self.df)
+        g[f'gender_{self.year}'](self.df)
+        g[f'race_{self.year}'](self.df)
+        g[f'work_attend_{self.year}'](self.df)
+        g[f'income_{self.year}'](self.df)
+        # match self.year:
+        #     case 1960:
+        #         educacao_1960(self.df)
+        #         # idade_1960(self.df)
+        #     case 1970:
+        #         educacao_1970(self.df)
+        #         # idade_1970(self.df)
+        #     case 1980:
+        #         educacao_1980(self.df)
+        #         # idade_1980(self.df)
+        #     case 1991:
+        #         educacao_1991(self.df)
+        #         # idade_1991(self.df)
+        #     case 2000:
+        #         educacao_2000(self.df)
+        #         # idade_2000(self.df)
+        #     case 2010:
+        #         idade_2010(self.df)
+        #         educacao_2010(self.df)
 
 
 NAO_CONCLUIU_SEM_DECLARACAO = 'Não concluiu e sem declaração de alfabetização'
@@ -2281,7 +2294,477 @@ def educacao_2010(df):
 
     df[C_ETAPA_CONC] = conc_tmp.astype(CAT_E_TYPES)
 
+################################## DOMICÍLIO ###################################
 
+############################ SITUAÇÃO DO DOMICÍLIO #############################
+
+STATE_HOUSING = 'situação_do_domicílio'
+SHU = 'Urbana'
+SHR = 'Rural'
+
+def state_housing_1970(df):
+    '''
+    V004 - Código da situação do domicílio
+    --------------------------------------
+    0   Urbano
+    1   Suburbano
+    2   Rural
+    ======================================
+    '''
+    mapper = {
+        '0': 'Urbano',
+        '1': 'Urbano',
+        '2': 'Rural',
+    }
+    df[STATE_HOUSING] = df.V004.map(mapper).astype('category')
+
+
+def state_housing_2010(df):
+    '''
+    V1006 - Situação do domicílio
+    -----------------------------
+    1   Urbana
+    2   Rural
+    =============================
+    '''
+    mapper = {
+        '1': 'Urbana',
+        '2': 'Rural',
+    }
+    #TODO!!!!
+    #A variável está com um espaço a mais, montar novamente os parquets (ou alterar e salvar)
+    df[STATE_HOUSING] = df['V1006 '].map(mapper).astype('category')
+
+############################# UNIDADE DA FEDERAÇÃO #############################
+
+STATE = 'UF'
+
+ufs = {
+    'RO': 'Rondônia',
+    'AC': 'Acre',
+    'AM': 'Amazonas',
+    'RR': 'Roraima',
+    'PA': 'Pará',
+    'AP': 'Amapá',
+    'TO': 'Tocantins',
+    'MA': 'Maranhão',
+    'PI': 'Piauí',
+    'CE': 'Ceará',
+    'RN': 'Rio Grande do Norte',
+    'PB': 'Paraíba',
+    'PE': 'Pernambuco',
+    'AL': 'Alagoas',
+    'SE': 'Sergipe',
+    'BA': 'Bahia',
+    'MG': 'Minas Gerais',
+    'ES': 'Espírito Santo',
+    'RJ': 'Rio de Janeiro',
+    'SP': 'São Paulo',
+    'PR': 'Paraná',
+    'SC': 'Santa Catarina',
+    'RS': 'Rio Grande do Sul',
+    'MS': 'Mato Grosso do Sul',
+    'MT': 'Mato Grosso',
+    'GO': 'Goiás',
+    'DF': 'Distrito Federal',
+}
+
+def uf_1970(df):
+    '''
+    UF - Unidade da federação
+    -------------------------
+    1   Rondônia
+    2   Acre
+    3   Amazonas
+    4   Roraima
+    5   Pará
+    6   Amapá
+    7   Maranhão
+    8   Piauí
+    9   Ceará
+    10  Rio Grande do Norte
+    11  Paraíba
+    12  Pernambuco
+    13  Alagoas
+    14  Fernando de Noronha
+    15  Sérgipe
+    16  Bahia
+    17  Minas Gerais
+    18  Espírito Santo
+    19  Rio de Janeiro
+    20  Guanabara
+    21  São Paulo
+    22  Paraná
+    23  Santa Catarina
+    24  Rio Grande do Sul
+    25  Mato Grosso
+    26  Goiás
+    27  Distrito Federal
+    =========================
+    '''
+
+    mapper = {
+        '1':  ufs['RO'],
+        '2':  ufs['AC'],
+        '3':  ufs['AM'],
+        '4':  ufs['RR'],
+        '5':  ufs['PA'],
+        '6':  ufs['AP'],
+        '7':  ufs['MA'],
+        '8':  ufs['PI'],
+        '9':  ufs['CE'],
+        '10': ufs['RN'],
+        '11': ufs['PB'],
+        '12': ufs['PE'],
+        '13': ufs['AL'],
+        '14': ufs['PE'],
+        '15': ufs['SE'],
+        '16': ufs['BA'],
+        '17': ufs['MG'],
+        '18': ufs['ES'],
+        '19': ufs['RJ'],
+        '20': ufs['RJ'],
+        '21': ufs['SP'],
+        '22': ufs['PR'],
+        '23': ufs['SC'],
+        '24': ufs['RS'],
+        '25': ufs['MT'],
+        '26': ufs['GO'],
+        '27': ufs['DF'],
+    }
+
+    df[STATE] = df.UF.map(mapper).astype('category')
+
+
+def uf_2010(df):
+    '''
+    V0001 - Unidade da federação
+    ----------------------------
+    11  Rondônia
+    12  Acre
+    13  Amazonas
+    14  Roraima
+    15  Pará
+    16  Amapá
+    17  Tocantins
+    21  Maranhão
+    22  Piauí
+    23  Ceará
+    24  Rio Grande do Norte
+    25  Paraíba
+    26  Pernambuco
+    27  Alagoas
+    28  Sergipe
+    29  Bahia
+    31  Minas Gerais
+    32  Espírito Santo
+    33  Rio de Janeiro
+    35  São Paulo
+    41  Paraná
+    42  Santa Catarina
+    43  Rio Grande do Sul
+    50  Mato Grosso do Sul
+    51  Mato Grosso
+    52  Goiás
+    53  Distrito Federal
+    ============================
+    '''
+
+    mapper = {
+        '11': ufs['RO'],
+        '12': ufs['AC'],
+        '13': ufs['AM'],
+        '14': ufs['RR'],
+        '15': ufs['PA'],
+        '16': ufs['AP'],
+        '17': ufs['TO'],
+        '21': ufs['MA'],
+        '22': ufs['PI'],
+        '23': ufs['CE'],
+        '24': ufs['RN'],
+        '25': ufs['PB'],
+        '26': ufs['PE'],
+        '27': ufs['AL'],
+        '28': ufs['SE'],
+        '29': ufs['BA'],
+        '31': ufs['MG'],
+        '32': ufs['ES'],
+        '33': ufs['RJ'],
+        '35': ufs['SP'],
+        '41': ufs['PR'],
+        '42': ufs['SC'],
+        '43': ufs['RS'],
+        '50': ufs['MS'],
+        '51': ufs['MT'],
+        '52': ufs['GO'],
+        '53': ufs['DF'],
+    }
+
+    df[STATE] = df.V0001.map(mapper).astype('category')
+
+################################### PESSOAS ####################################
+
+#################################### IDADE #####################################
+
+#Em anos
 AGE = 'idade'
-def idade_2010(df):
+
+def age_1970(df):
+    '''
+    V026 - Tipo de idade
+    --------------------
+    0   Ignorada
+    1   Declarada em meses
+    2   Presumida em meses
+    3   Declarada em anos
+    4   Presumida em anos
+    ====================
+
+    V027 - Idade em meses ou anos
+    -----------------------------
+    Variável em string, converter para numérico
+    =============================
+    '''
+
+    df[AGE] = pd.NA
+    df.loc[df.V026.isin({'1', '2'}), AGE] = 0
+    df.loc[df.V026.isin({'3', '4'}), AGE] = df.loc[df.V026.isin({'3', '4'}), 'V027'].astype('UInt16')
+    df[AGE] = df[AGE].astype('UInt16')
+
+
+def age_2010(df):
     df[AGE] = df.V6036
+
+
+##################################### SEXO #####################################
+
+GENDER = 'sexo'
+
+GM = 'Masculino'
+GF = 'Feminino'
+
+def gender_1970(df):
+    '''
+    V023 - Sexo
+    -----------
+    0   Homem
+    1   Mulher  
+    ===========
+    '''
+
+    mapper = {
+        '0': GM,
+        '1': GF,
+    }
+
+    df[GENDER] = df.V023.map(mapper).astype('category')
+
+def gender_2010(df):
+    '''
+    V0601 - Sexo
+    ------------
+    1   Masculino
+    2   Feminino
+    ============
+    '''
+    
+    mapper = {
+        '1': GM,
+        '2': GF,
+    }
+
+    df[GENDER] = df.V0601.map(mapper).astype('category')
+
+
+##################################### RAÇA #####################################
+
+RACE = 'raça'
+RACE_M = 'raça_dual'
+
+RBR = 'Branca'
+RPR = 'Preta'
+RAM = 'Amarela'
+RPA = 'Parda'
+RIN = 'Indígena'
+RNB = 'Não branca'
+
+def race_1970(df):
+    #Não há informações de raça/cor no Censo de 1970
+    pass
+
+
+def race_2010(df):
+    '''
+    V0606 - Cor ou raça
+    -------------------
+    1   Branca
+    2   Preta
+    3   Amarela
+    4   Parda
+    5   Indígena
+    9   Ignorado
+    ===================
+    '''
+
+    mapper = {
+        '1': RBR,
+        '2': RPR,
+        '3': RAM,
+        '4': RPA,
+        '5': RIN,
+    }
+
+    mapper_m = {
+        '1': RBR,
+        '2': RNB,
+        '3': RNB,
+        '4': RNB,
+        '5': RNB,
+    }
+
+    df[RACE] = df.V0606.map(mapper).astype('category')
+    df[RACE_M] = df.V0606.map(mapper_m).astype('category')
+
+
+################################### RELIGIÃO ###################################
+
+RELIGION = 'religião'
+
+def religion_1970(df):
+    '''
+    V028 - Possui religião
+    ----------------------
+    1   Católica romana
+    2   Evangélica
+    3   Espírita
+    4   Outra religião
+    5   Sem religião
+    0   Sem declaração
+    ======================
+    '''
+    
+    #TODO
+    df[RELIGION] = df.V028
+
+def religion_2010(df):
+    '''
+    V6121 - Qual é sua religião ou culto:
+    -------------------------------------
+    =====================================
+    '''
+
+    #TODO
+    df[RELIGION] = df.V6121
+
+
+################################## TRABALHA? ###################################
+
+WORK_ATTEND = 'trabalha-estuda'
+WA   = 'Trabalha e estuda'
+WNA  = 'Trabalha e não estuda' 
+NWA  = 'Não trabalha e estuda'
+NWNA = 'Não trabalha e não estuda'
+
+def work_attend_1970(df):
+    '''
+    V049 - Há quanto tempo procura trabalho
+    ---------------------------------------
+    0   Sem declaração
+    1   Menos de 3 meses
+    2   De 3 meses e mais
+    3   Trabalha
+    =======================================
+    '''
+
+    df[WORK_ATTEND] = pd.NA
+    df.loc[(df.V049 == '3') & (df.V036 == '0'), WORK_ATTEND] = WA
+    df.loc[(df.V049 == '3') & (df.V036 == '1'), WORK_ATTEND] = WNA
+    df.loc[(df.V049 != '3').fillna(True) & (df.V036 == '0'), WORK_ATTEND] = NWA
+    df.loc[(df.V049 != '3').fillna(True) & (df.V036 == '1'), WORK_ATTEND] = NWNA
+    df[WORK_ATTEND] = df[WORK_ATTEND].astype('category')
+
+def work_attend_2010(df):
+    '''
+    V0641 - Na semana de 25 a 31/07/10, durante pelo menos uma hora trabalhou
+    ------------------------------------------------------------------------
+    1   Sim
+    2   Não
+    ========================================================================
+    '''
+
+    df[WORK_ATTEND] = pd.NA
+    df.loc[(df.V0641 == '1') & df.V0628.isin({'1', '2'}), WORK_ATTEND] = WA
+    df.loc[(df.V0641 == '1') & df.V0628.isin({'3', '4'}), WORK_ATTEND] = WNA
+    df.loc[(df.V0641 == '2') & df.V0628.isin({'1', '2'}), WORK_ATTEND] = NWA
+    df.loc[(df.V0641 == '2') & df.V0628.isin({'3', '4'}), WORK_ATTEND] = NWNA
+    df[WORK_ATTEND] = df[WORK_ATTEND].astype('category')
+
+
+############################## RENDIMENTO MENSAL ###############################
+
+INCOME = 'rendimento_mensal'
+
+def income_1970(df):
+    '''
+    V041 - Rendimento médio mensal
+    ------------------------------
+    9999 Para pessoas que não têm rendimentos
+    ==============================
+    Valores em Cruzeiro Novo (cf. http://ipeadata.gov.br/iframe_histmoedas.aspx)
+    '''
+
+    df[INCOME] = df.V041.astype('Float64')
+    df.loc[df.V041 == 9999, INCOME] = pd.NA
+
+def income_2010(df):
+    '''
+    V6527 - Rendimento mensal total em julho de 2010
+    ------------------------------------------------
+    ================================================
+    Valores em R$
+    '''
+
+    df[INCOME] = df.V6527
+
+
+############################### RENDA DOMICILIAR ###############################
+
+H_INCOME = 'rendimento_domiciliar_per_capita'
+
+def h_income_2010(df):
+    '''
+    V6531 - Rendimento domiciliar per capita em julho de 2010
+    Valores em R$
+    '''
+
+    df[H_INCOME] = df.V6531
+
+############################## HORAS TRABALHADAS ###############################
+
+WORK_HOURS = 'horas_trabalhadas'
+
+def work_hours_1970(df):
+    '''
+    V048 - Tempo ou hora de trabalho na última semana
+    -------------------------------------------------
+    1   Menos de 3 meses
+    2   De 3 a 5 meses
+    3   De 6 a 8 meses
+    4   De 9 a 12 meses
+    5   Menos de 15 horas
+    6   De 15 a 39 horas
+    7   De 40 a 49 horas
+    8   De 50 horas e mais
+    9   Procurando trabalho
+    0   Sem declaração
+    =================================================
+    '''
+    #TODO
+    pass
+
+def work_hours_2010(df):
+    '''
+    V0653 - No trabalho principal, quantas horas trabalhava habitualmente
+    '''
+
+    df[WORK_HOURS] = df.V0653

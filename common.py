@@ -286,13 +286,19 @@ class handleDatabase:
         return self.df
                 
     def save(self, filetype):
-        success = False
-        print_info(f'Salvando no formato {filetype}...')
-        save_fun = getattr(self.df, f'to_{filetype}')
-        save_fun(self.dest_filepath)
-        print_info('Arquivo salvo com sucesso!')
+        if filetype == 'mysql':
+            self.mysql()
+        else:
+            success = False
+            print_info(f'Salvando no formato {filetype}...')
+            save_fun = getattr(self.df, f'to_{filetype}')
+            save_fun(self.dest_filepath)
+            print_info('Arquivo salvo com sucesso!')
 
-    def get_min_int_dtype(self):
+    def mysql(self):
+       pass 
+
+    def get_min_int_dtype(self, col):
         if self.df[col].dtype == 'object':
             self.df[col] = self.df[col].astype(float)
         max_ = self.df[col].max()
