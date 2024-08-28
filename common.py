@@ -180,7 +180,7 @@ class handleDatabase:
                 print_error('Não foi encontrado nenhum endereço!')
                 raise ValueError
             self.file_url = file_urls
-        print_info(f'Endereço(s) {self.file_url} obtido com sucesso!')
+        print_info(f'Endereço(s) {self.file_url} obtido[s] com sucesso!')
         return self.file_url
 
     def get_save_raw_database(self, file_url=None):
@@ -271,8 +271,8 @@ class handleDatabase:
 
             return self.df
 
-        if not hasattr(self, 'filepath') and not hasattr(self, 'filepaths'):
-            self.filepath = self.get_save_raw_database()
+        # if not hasattr(self, 'filepath') and not hasattr(self, 'filepaths'):
+        #     self.filepath = self.get_save_raw_database()
         if not hasattr(self, 'df') and self.is_zipped:
             self.wraper_unzip(self.unzip)
         if not self.is_preprocessed:
