@@ -2,6 +2,7 @@ from .censoDemografico import handleCensoDemografico
 from .pnadc import handlePNADc
 from .saeb import handleSaeb
 from .ideb import handleIdeb
+from .rais import handleRais
 from .definitions import UF_SIGLA_NOME
 from .xlsx_maker import worksheet_column, to_worksheet, workbook_setup
 
@@ -14,6 +15,7 @@ __all__ = (
     'handlePNADc',
     'hangleSaeb',
     'handleIdeb',
+    'handleRais',
     'UF_SIGLA_NOME',
     'worksheet_column',
     'to_worksheet',
