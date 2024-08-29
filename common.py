@@ -271,8 +271,8 @@ class handleDatabase:
 
             return self.df
 
-        # if not hasattr(self, 'filepath') and not hasattr(self, 'filepaths'):
-        #     self.filepath = self.get_save_raw_database()
+        if not hasattr(self, 'filepath') and not hasattr(self, 'filepaths'):
+             self.filepath = self.get_save_raw_database()
         if not hasattr(self, 'df') and self.is_zipped:
             self.wraper_unzip(self.unzip)
         if not self.is_preprocessed:

@@ -43,22 +43,22 @@ DTYPES = {
     'Natureza Jurídica':       'string',
     'Ind Portador Defic':      'string',
     'Qtd Dias Afastamento':    'UInt16',
-    'Raça Cor':                'string',   
+    'Raça Cor':                'string',
     'Regiões Adm DF':          'string',
-    'Vl Remun Dezembro Nom':   'float',   
+    'Vl Remun Dezembro Nom':   'float',
     'Vl Remun Dezembro (SM)':  'float',
-    'Vl Remun Média Nom':      'float',   
+    'Vl Remun Média Nom':      'float',
     'Vl Remun Média (SM)':     'float',
-    'CNAE 2.0 Subclasse':      'string',   
-    'Sexo Trabalhador':        'string',   
+    'CNAE 2.0 Subclasse':      'string',
+    'Sexo Trabalhador':        'string',
     'Tamanho Estabelecimento': 'string',
     'Tempo Emprego':           'float',
-    'Tipo Admissão':           'string',  
-    'Tipo Estab':              'string',  
-    'Tipo Estab.1':            'string',  
-    'Tipo Defic':              'string',  
-    'Tipo Vínculo':            'string',  
-    'IBGE Subsetor':           'string',  
+    'Tipo Admissão':           'string',
+    'Tipo Estab':              'string',
+    'Tipo Estab.1':            'string',
+    'Tipo Defic':              'string',
+    'Tipo Vínculo':            'string',
+    'IBGE Subsetor':           'string',
     'Vl Rem Janeiro SC':       'float',
     'Vl Rem Fevereiro SC':     'float',
     'Vl Rem Março SC':         'float',
@@ -76,7 +76,8 @@ DTYPES = {
 }
 
 
-#checagens de dados https://bi.mte.gov.br/scripts10/dardoweb.cgi
+#checagens de dados https://bi.mte.gov.br/bgcaged/caged_anuario_rais/anuario.htm
+#https://cnae.ibge.gov.br/classificacoes/download-concla.html
 class handleRais(handleDatabase):
     def __init__(self, year, uf, type_db='parquet'):
         self.type_df = type_db
@@ -140,16 +141,15 @@ class handleRais(handleDatabase):
         return self.raw_filepath
 
     def unzip(self):
-        # if not hasattr(self, 'raw_filepath'):
-        #     self.get_save_raw_database()
-        self.raw_filepath = '/media/tiago/Acervo - HDD/AAA/rais/raw-files/RAIS_VINC_PUB_SP.7z'
+        if not hasattr(self, 'raw_filepath'):
+            self.get_save_raw_database()
         with py7zr.SevenZipFile(self.raw_filepath) as zf:
             target = [f for f in zf.getnames() if os.path.splitext(f)[-1] == '.txt'][0]
         dir_path, filename = os.path.split(target)
         target = [dir_path, target]
         tmp_path = os.path.join(self.raw_files_path, 'tmp')
-        # with py7zr.SevenZipFile(self.raw_filepath) as zf:
-        #     zf.extract(path=tmp_path, targets=target)
+        with py7zr.SevenZipFile(self.raw_filepath) as zf:
+             zf.extract(path=tmp_path, targets=target)
         file_path = os.path.join(tmp_path, filename)
         self.df = pd.read_csv(file_path, sep=';', decimal=',', encoding='windows-1252', low_memory=False, dtype=DTYPES)
         for c in self.df.select_dtypes('string'):
@@ -157,6 +157,6 @@ class handleRais(handleDatabase):
             self.df[c] = self.df[c].astype('category')
         for c in self.df.select_dtypes('float'):
             self.df[c] = self.df[c].astype('Float64')
-        # shutil.rmtree(tmp_path)
+        shutil.rmtree(tmp_path)
         return self.df
 
