@@ -75,15 +75,21 @@ DTYPES = {
     'Ind Trab Parcial':        'string',
 }
 
+KINDS = ('vinculos', 'estabelecimentos')
+
 
 #checagens de dados https://bi.mte.gov.br/bgcaged/caged_anuario_rais/anuario.htm
 #https://cnae.ibge.gov.br/classificacoes/download-concla.html
 class handleRais(handleDatabase):
-    def __init__(self, year, uf, type_db='parquet'):
+    def __init__(self, year, uf, kind, type_db='parquet'):
         self.type_df = type_db
         self.uf = uf
+        if kind not in KINDS:
+            print_error(f'O tipo {kind} não é válido. São tipos válidos {KINDS}')
+            raise ValueError
+        self.kind = kind
         super().__init__(year, '')
-        self.filename = f'{self.year}-{self.uf}-rais'
+        self.filename = f'{self.year}-{self.kind}-{self.uf}-rais'
         self.name = 'RAIS'
         self.doc_filename = ''
         self.path = os.path.join(self.root, PATH)
@@ -125,7 +131,7 @@ class handleRais(handleDatabase):
         if not hasattr(self, 'file_url'):
             self.get_url()
         filename = os.path.basename(self.file_url)
-        self.raw_filepath = os.path.join(self.raw_files_path, filename)
+        self.raw_filepath = os.path.join(self.raw_files_path, f'{self.year}-{filename}')
         if os.path.isfile(self.raw_filepath) and os.path.getsize(self.raw_filepath):
             print_info(f'{self.raw_filepath} já existente.')
             return self.raw_filepath
