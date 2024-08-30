@@ -1,3 +1,4 @@
+import warnings
 from collections import namedtuple, defaultdict
 
 import pandas as pd
@@ -141,7 +142,11 @@ def to_worksheet(writer,
     coluna_offset = len(estrutura_header)
     
     for i, val in enumerate(estrutura_header):
-        worksheet.merge_range(0, i, header_size-1, i, val.title, estilos[HEADER_PADRAO])
+        assert header_size > 0
+        if header_size == 1:
+            worksheet.write(header_size-1, i, val.title, estilos[HEADER_PADRAO]) 
+        else:
+            worksheet.merge_range(0, i, header_size-1, i, val.title, estilos[HEADER_PADRAO])
         worksheet.set_column(i, i, val.tamanho, estilos[val.estilo])
 
     for i in range(df.shape[1]):
@@ -158,7 +163,8 @@ def to_worksheet(writer,
             i_row_start = header_size
             for n_row, val in zip(v_counts, v_counts.index):
                 i_row_end = i_row_start + n_row - 1
-                worksheet.merge_range(i_row_start, i_col, i_row_end, i_col, val, estilos[HEADER_PADRAO])
+                if i_row_start != i_row_end:
+                    worksheet.merge_range(i_row_start, i_col, i_row_end, i_col, val, estilos[HEADER_PADRAO])
                 i_row_start = i_row_end + 1
 
     return worksheet
