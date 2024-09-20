@@ -8,6 +8,7 @@ FILETYPES_PATH = {
 SUPPORTED_FTs = ('feather', 'parquet')
 
 RAW_FILES_PATH = 'raw-files'
+DOC_PATH = 'documentacao'
 
 UF_SIGLA_NOME = {
     'RO': 'Rondônia',
@@ -94,3 +95,5 @@ MAP_BRASIL_REGIOES_UFS.update({
 })
 
 MAP_BRASIL_REGIOES_UFS.update({'Brasil': 'brasil'})
+
+SUPPLEMENTAL_PATH = '.supplemental/'
