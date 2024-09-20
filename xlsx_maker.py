@@ -159,7 +159,7 @@ def to_worksheet(writer,
 
     for i_col, h in enumerate(estrutura_header):
         if h.m_header == True:
-            v_counts = df[h.nome].value_counts()
+            v_counts = df[h.nome].value_counts(sort=False).pipe(lambda s: s[s > 0])
             i_row_start = header_size
             for n_row, val in zip(v_counts, v_counts.index):
                 i_row_end = i_row_start + n_row - 1
